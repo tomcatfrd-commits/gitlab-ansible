@@ -1,0 +1,314 @@
+---
+# =============================================================================
+# CENTRAL GITLAB DEPLOYMENT CONFIGURATION
+# =============================================================================
+#
+# This is the primary configuration file for the entire deployment.
+#
+# Environment-specific values should be changed here rather than inside:
+#
+#   - inventory
+#   - playbooks
+#   - roles
+#   - templates
+#
+# Secrets MUST NOT be stored here.
+# Secrets will be stored in:
+#
+#   group_vars/gitlab_vault.yml
+#
+# and protected with Ansible Vault.
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Ansible connection
+# -----------------------------------------------------------------------------
+
+# IP address or resolvable hostname of the GitLab server.
+ansible_host: "CHANGE_ME"
+
+# SSH account used by Ansible.
+ansible_user: "CHANGE_ME"
+
+# Administrative SSH port of Ubuntu.
+#
+# This is the SSH service used by administrators.
+# It is intentionally independent from GitLab's SSH port.
+ansible_port: 2222
+
+# Privilege escalation.
+ansible_become: true
+ansible_become_method: sudo
+
+
+# -----------------------------------------------------------------------------
+# Expected host platform
+# -----------------------------------------------------------------------------
+
+gitlab_expected_distribution: "Ubuntu"
+gitlab_expected_release: "26.04"
+gitlab_expected_architecture: "x86_64"
+
+# Expected resources.
+gitlab_expected_vcpus: 8
+gitlab_expected_memory_mb: 16384
+
+
+# -----------------------------------------------------------------------------
+# GitLab deployment identity
+# -----------------------------------------------------------------------------
+
+# Linux account under whose home directory GitLab deployment files live.
+gitlab_deployment_user: "{{ ansible_user }}"
+
+# Deployment home directory.
+#
+# The role will validate this against the actual remote user's home directory.
+gitlab_deployment_home: "/home/{{ gitlab_deployment_user }}"
+
+
+# -----------------------------------------------------------------------------
+# GitLab version
+# -----------------------------------------------------------------------------
+
+# Exact GitLab release.
+gitlab_version: "19.3.1-ee.0"
+
+# Official Enterprise Edition image.
+gitlab_image_repository: "gitlab/gitlab-ee"
+
+# Target CPU architecture.
+gitlab_architecture: "amd64"
+
+# Immutable digest for the selected GitLab EE image.
+#
+# linux/amd64:
+# sha256:f204f55c2825659fd2b4ae6a6acdcd79a274e3c1dfc98b74a6f0c7b5f9da14e6
+#
+gitlab_image_digest: >-
+  sha256:f204f55c2825659fd2b4ae6a6acdcd79a274e3c1dfc98b74a6f0c7b5f9da14e6
+
+
+# -----------------------------------------------------------------------------
+# GitLab network
+# -----------------------------------------------------------------------------
+
+# Fully qualified domain name used by users.
+gitlab_fqdn: "CHANGE_ME"
+
+# HTTPS listener.
+gitlab_https_port: 443
+
+# GitLab SSH listener.
+gitlab_ssh_port: 22
+
+# Container HTTP listener.
+#
+# HTTP will not be the normal user-facing protocol.
+gitlab_http_port: 80
+
+
+# -----------------------------------------------------------------------------
+# GitLab filesystem layout
+# -----------------------------------------------------------------------------
+
+# Root of the GitLab deployment.
+gitlab_root_dir: "/home/{{ gitlab_deployment_user }}/gitlab"
+
+# Docker Compose project.
+gitlab_compose_dir: "{{ gitlab_root_dir }}/compose"
+
+# /etc/gitlab
+gitlab_config_dir: "{{ gitlab_root_dir }}/config"
+
+# /var/log/gitlab
+gitlab_logs_dir: "{{ gitlab_root_dir }}/logs"
+
+# /var/opt/gitlab
+gitlab_data_dir: "{{ gitlab_root_dir }}/data"
+
+# Backup destination.
+gitlab_backup_dir: "{{ gitlab_root_dir }}/backups"
+
+# Path used by GitLab inside the container.
+gitlab_backup_container_dir: "/var/opt/gitlab/backups"
+
+# TLS directory.
+gitlab_tls_dir: "{{ gitlab_config_dir }}/tls"
+
+
+# -----------------------------------------------------------------------------
+# TLS
+# -----------------------------------------------------------------------------
+
+# Self-signed certificate as requested.
+gitlab_tls_enabled: true
+
+# Certificate subject.
+gitlab_tls_common_name: "{{ gitlab_fqdn }}"
+
+# Certificate validity.
+gitlab_tls_validity_days: 825
+
+# RSA private key size.
+gitlab_tls_key_size: 4096
+
+gitlab_tls_certificate_file: "{{ gitlab_tls_dir }}/{{ gitlab_fqdn }}.crt"
+gitlab_tls_private_key_file: "{{ gitlab_tls_dir }}/{{ gitlab_fqdn }}.key"
+
+
+# -----------------------------------------------------------------------------
+# GitLab Omnibus configuration
+# -----------------------------------------------------------------------------
+
+gitlab_external_url: "https://{{ gitlab_fqdn }}"
+
+# Advertised SSH port for Git operations.
+gitlab_omnibus_ssh_port: "{{ gitlab_ssh_port }}"
+
+# Redirect HTTP requests to HTTPS.
+gitlab_redirect_http_to_https: true
+
+# Enable GitLab's NGINX SSL configuration.
+gitlab_nginx_ssl_enabled: true
+
+# HSTS.
+gitlab_hsts_enabled: true
+gitlab_hsts_max_age: 31536000
+gitlab_hsts_include_subdomains: true
+gitlab_hsts_preload: false
+
+
+# -----------------------------------------------------------------------------
+# Optional GitLab services
+# -----------------------------------------------------------------------------
+
+# Keep unused functionality disabled initially.
+gitlab_registry_enabled: false
+gitlab_pages_enabled: false
+
+
+# -----------------------------------------------------------------------------
+# Authentication / security policy
+# -----------------------------------------------------------------------------
+
+gitlab_signup_enabled: false
+
+gitlab_admin_mode_enabled: true
+
+gitlab_require_two_factor_authentication: true
+
+gitlab_two_factor_grace_period_hours: 8
+
+gitlab_unknown_signin_notifications: true
+
+gitlab_require_personal_access_token_expiry: true
+
+
+# -----------------------------------------------------------------------------
+# Docker runtime
+# -----------------------------------------------------------------------------
+
+gitlab_restart_policy: "unless-stopped"
+
+gitlab_shm_size: "256m"
+
+gitlab_pids_limit: 4096
+
+gitlab_nofile_soft: 65536
+gitlab_nofile_hard: 65536
+
+# Docker JSON log rotation.
+gitlab_log_max_size: "50m"
+gitlab_log_max_files: 5
+
+
+# -----------------------------------------------------------------------------
+# Docker resource policy
+# -----------------------------------------------------------------------------
+
+# Server:
+#   8 CPU
+#   16 GB RAM
+#
+# We intentionally do not impose restrictive Docker limits initially.
+# Resource limits can be introduced later after observing GitLab workload.
+gitlab_cpu_limit: null
+gitlab_memory_limit: null
+
+
+# -----------------------------------------------------------------------------
+# Docker security policy
+# -----------------------------------------------------------------------------
+
+# Use Docker's no-new-privileges security option.
+gitlab_no_new_privileges: true
+
+# We will evaluate GitLab's required Linux capabilities rather than blindly
+# dropping every capability. This is intentionally configurable.
+gitlab_cap_drop: []
+
+# Do not use privileged mode.
+gitlab_privileged: false
+
+# Do not use host networking.
+gitlab_network_mode: "bridge"
+
+# Do not mount the Docker socket into GitLab.
+gitlab_mount_docker_socket: false
+
+
+# -----------------------------------------------------------------------------
+# Host firewall
+# -----------------------------------------------------------------------------
+
+gitlab_manage_firewall: true
+
+# Inbound ports required by the deployment.
+gitlab_firewall_allowed_tcp_ports:
+  - "{{ ansible_port }}"
+  - "{{ gitlab_https_port }}"
+  - "{{ gitlab_ssh_port }}"
+
+
+# -----------------------------------------------------------------------------
+# Host preparation
+# -----------------------------------------------------------------------------
+
+gitlab_manage_host: true
+gitlab_manage_docker: true
+
+# Leave IPv6 enabled unless deliberately disabled later.
+gitlab_disable_ipv6: false
+
+
+# -----------------------------------------------------------------------------
+# Backup
+# -----------------------------------------------------------------------------
+
+# Backup automation exists in the project but is initially disabled until the
+# GitLab installation has been validated.
+gitlab_backup_enabled: false
+
+# Number of days GitLab retains backups.
+gitlab_backup_retention_days: 14
+
+# Daily backup schedule.
+gitlab_backup_schedule: "*-*-* 02:00:00"
+
+
+# -----------------------------------------------------------------------------
+# Deployment behavior
+# -----------------------------------------------------------------------------
+
+# Do not upgrade GitLab implicitly.
+#
+# Changing gitlab_version and explicitly running the deployment is the
+# controlled upgrade mechanism.
+gitlab_image_pull_policy: "missing"
+
+# Configuration changes trigger appropriate handlers.
+gitlab_restart_on_config_change: true
+

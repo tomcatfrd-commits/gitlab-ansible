@@ -1,0 +1,161 @@
+---
+# =============================================================================
+# GitLab directory preparation
+# =============================================================================
+#
+# Persistent GitLab data is kept below the configured deployment user's home:
+#
+#   {{ gitlab_root_dir }}
+#
+# Docker mounts:
+#
+#   config  -> /etc/gitlab
+#   logs    -> /var/log/gitlab
+#   data    -> /var/opt/gitlab
+#
+# TLS material is stored under:
+#
+#   {{ gitlab_tls_dir }}
+#
+# All directories are created idempotently and with restrictive permissions.
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Validate the deployment root
+# -----------------------------------------------------------------------------
+
+- name: Verify GitLab root remains below deployment user's home
+  ansible.builtin.assert:
+    that:
+      - gitlab_root_dir.startswith(gitlab_deployment_home ~ '/')
+    fail_msg: >-
+      Refusing to create GitLab directories outside the deployment user's
+      home directory.
+    success_msg: "GitLab deployment root is within the user's home directory."
+
+
+# -----------------------------------------------------------------------------
+# Main directory tree
+# -----------------------------------------------------------------------------
+
+- name: Create GitLab root directory
+  ansible.builtin.file:
+    path: "{{ gitlab_root_dir }}"
+    state: directory
+    owner: "{{ gitlab_deployment_user }}"
+    group: "{{ gitlab_deployment_user }}"
+    mode: "0750"
+
+
+- name: Create GitLab Compose directory
+  ansible.builtin.file:
+    path: "{{ gitlab_compose_dir }}"
+    state: directory
+    owner: "{{ gitlab_deployment_user }}"
+    group: "{{ gitlab_deployment_user }}"
+    mode: "0750"
+
+
+- name: Create GitLab configuration directory
+  ansible.builtin.file:
+    path: "{{ gitlab_config_dir }}"
+    state: directory
+    owner: "{{ gitlab_deployment_user }}"
+    group: "{{ gitlab_deployment_user }}"
+    mode: "0750"
+
+
+- name: Create GitLab logs directory
+  ansible.builtin.file:
+    path: "{{ gitlab_logs_dir }}"
+    state: directory
+    owner: "{{ gitlab_deployment_user }}"
+    group: "{{ gitlab_deployment_user }}"
+    mode: "0750"
+
+
+- name: Create GitLab data directory
+  ansible.builtin.file:
+    path: "{{ gitlab_data_dir }}"
+    state: directory
+    owner: "{{ gitlab_deployment_user }}"
+    group: "{{ gitlab_deployment_user }}"
+    mode: "0750"
+
+
+- name: Create GitLab backup directory
+  ansible.builtin.file:
+    path: "{{ gitlab_backup_dir }}"
+    state: directory
+    owner: "{{ gitlab_deployment_user }}"
+    group: "{{ gitlab_deployment_user }}"
+    mode: "0750"
+
+
+# -----------------------------------------------------------------------------
+# TLS directory
+# -----------------------------------------------------------------------------
+
+- name: Create GitLab TLS directory
+  ansible.builtin.file:
+    path: "{{ gitlab_tls_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: gitlab_tls_enabled | bool
+
+
+# -----------------------------------------------------------------------------
+# Protect Compose configuration
+# -----------------------------------------------------------------------------
+
+- name: Ensure GitLab Compose project is not group/world writable
+  ansible.builtin.file:
+    path: "{{ gitlab_compose_dir }}"
+    state: directory
+    owner: "{{ gitlab_deployment_user }}"
+    group: "{{ gitlab_deployment_user }}"
+    mode: "0750"
+
+
+# -----------------------------------------------------------------------------
+# Verify directory ownership and permissions
+# -----------------------------------------------------------------------------
+
+- name: Inspect GitLab root directory
+  ansible.builtin.stat:
+    path: "{{ gitlab_root_dir }}"
+  register: gitlab_root_stat
+
+
+- name: Verify GitLab root directory ownership
+  ansible.builtin.assert:
+    that:
+      - gitlab_root_stat.stat.pw_name == gitlab_deployment_user
+      - gitlab_root_stat.stat.gr_name == gitlab_deployment_user
+      - gitlab_root_stat.stat.mode[-3:] == "750"
+    fail_msg: >-
+      GitLab root directory ownership or permissions are incorrect.
+    success_msg: "GitLab root directory permissions validated."
+
+
+- name: Inspect GitLab TLS directory
+  ansible.builtin.stat:
+    path: "{{ gitlab_tls_dir }}"
+  register: gitlab_tls_dir_stat
+  when: gitlab_tls_enabled | bool
+
+
+- name: Verify GitLab TLS directory permissions
+  ansible.builtin.assert:
+    that:
+      - gitlab_tls_dir_stat.stat.pw_name == "root"
+      - gitlab_tls_dir_stat.stat.gr_name == "root"
+      - gitlab_tls_dir_stat.stat.mode[-3:] == "700"
+    fail_msg: >-
+      GitLab TLS directory must be owned by root:root with mode 0700.
+    success_msg: "GitLab TLS directory permissions validated."
+  when: gitlab_tls_enabled | bool

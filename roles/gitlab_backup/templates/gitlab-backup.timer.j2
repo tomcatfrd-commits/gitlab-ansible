@@ -1,0 +1,22 @@
+[Unit]
+Description=Schedule GitLab native backup
+Documentation=https://docs.gitlab.com/administration/backup_restore/
+
+
+[Timer]
+
+# Run the backup according to the central configuration.
+OnCalendar={{ gitlab_backup_schedule }}
+
+# Run a missed backup once after the server comes back online.
+Persistent=true
+
+# Spread scheduled maintenance slightly to avoid an exact-time burst.
+RandomizedDelaySec=15m
+
+# Execute the corresponding one-shot backup service.
+Unit={{ gitlab_backup_service_name }}
+
+
+[Install]
+WantedBy=timers.target

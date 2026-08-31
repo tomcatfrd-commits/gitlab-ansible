@@ -1,0 +1,85 @@
+---
+# =============================================================================
+# gitlab_backup role defaults
+# =============================================================================
+#
+# Environment-specific values belong in:
+#
+#   group_vars/gitlab.yml
+#
+# This role uses GitLab's native backup mechanism rather than copying the
+# GitLab data directory with generic filesystem/archive tools.
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Backup enablement
+# -----------------------------------------------------------------------------
+
+gitlab_backup_enabled: false
+
+
+# -----------------------------------------------------------------------------
+# Backup destination
+# -----------------------------------------------------------------------------
+
+gitlab_backup_directory: "{{ gitlab_backup_dir }}"
+
+
+# -----------------------------------------------------------------------------
+# Retention
+# -----------------------------------------------------------------------------
+
+gitlab_backup_retention_days: 14
+
+
+# -----------------------------------------------------------------------------
+# Backup scheduling
+# -----------------------------------------------------------------------------
+#
+# The backup job will eventually be executed through systemd rather than
+# cron. This gives us:
+#
+#   - explicit service ownership
+#   - persistent scheduling
+#   - journal visibility
+#   - easier failure monitoring
+#
+# -----------------------------------------------------------------------------
+
+gitlab_backup_schedule: "*-*-* 02:00:00"
+
+
+# -----------------------------------------------------------------------------
+# Backup execution
+# -----------------------------------------------------------------------------
+
+gitlab_backup_container_name: "{{ gitlab_container_name }}"
+
+gitlab_backup_command: >-
+  gitlab-backup create
+
+
+# -----------------------------------------------------------------------------
+# Backup service account
+# -----------------------------------------------------------------------------
+#
+# The backup operation is executed through the GitLab container.
+# No additional host service account is required.
+# -----------------------------------------------------------------------------
+
+gitlab_backup_service_name: "gitlab-backup.service"
+
+gitlab_backup_timer_name: "gitlab-backup.timer"
+
+
+# -----------------------------------------------------------------------------
+# Systemd behavior
+# -----------------------------------------------------------------------------
+
+gitlab_backup_timer_enabled: "{{ gitlab_backup_enabled | bool }}"
+
+gitlab_backup_timer_state: >-
+  {{ 'started' if gitlab_backup_enabled | bool else 'stopped' }}
+

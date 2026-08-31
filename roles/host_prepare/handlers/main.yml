@@ -1,0 +1,21 @@
+---
+# =============================================================================
+# host_prepare role handlers
+# =============================================================================
+#
+# Handlers execute only when notified by a task that actually changed state.
+# This keeps the role idempotent and avoids unnecessary service restarts.
+#
+# =============================================================================
+
+
+- name: Reload sysctl
+  ansible.builtin.systemd_service:
+    name: systemd-sysctl.service
+    state: restarted
+
+
+- name: Restart chrony
+  ansible.builtin.systemd_service:
+    name: chrony
+    state: restarted

@@ -1,0 +1,211 @@
+# =============================================================================
+# GitLab Docker Compose
+# =============================================================================
+#
+# Managed by Ansible.
+#
+# GitLab:
+#   {{ gitlab_image_repository }}:{{ gitlab_version }}
+#
+# Image is pinned by digest to provide reproducible deployment.
+#
+# =============================================================================
+
+services:
+
+  gitlab:
+
+    # -------------------------------------------------------------------------
+    # Image
+    # -------------------------------------------------------------------------
+
+    image: "{{ gitlab_image }}"
+
+
+    # -------------------------------------------------------------------------
+    # Identity
+    # -------------------------------------------------------------------------
+
+    container_name: "{{ gitlab_container_name }}"
+
+    hostname: "{{ gitlab_container_hostname }}"
+
+
+    # -------------------------------------------------------------------------
+    # Lifecycle
+    # -------------------------------------------------------------------------
+
+    restart: "{{ gitlab_container_restart_policy }}"
+
+    stop_grace_period: "1m"
+
+
+    # -------------------------------------------------------------------------
+    # Shared memory
+    # -------------------------------------------------------------------------
+
+    shm_size: "{{ gitlab_container_shm_size }}"
+
+
+    # -------------------------------------------------------------------------
+    # Process limits
+    # -------------------------------------------------------------------------
+
+    pids_limit: {{ gitlab_container_pids_limit }}
+
+
+    # -------------------------------------------------------------------------
+    # Resource limits
+    # -------------------------------------------------------------------------
+    #
+    # CPU/memory limits remain unset initially because the host has the GitLab
+    # baseline of 8 vCPUs / 16 GB RAM. Restrictive limits can be introduced
+    # later after observing actual workload.
+    # -------------------------------------------------------------------------
+
+{% if gitlab_cpu_limit is not none %}
+    cpus: "{{ gitlab_cpu_limit }}"
+{% endif %}
+
+{% if gitlab_memory_limit is not none %}
+    mem_limit: "{{ gitlab_memory_limit }}"
+{% endif %}
+
+
+    # -------------------------------------------------------------------------
+    # Security
+    # -------------------------------------------------------------------------
+
+    privileged: {{ gitlab_container_privileged | bool | to_json }}
+
+    security_opt:
+{% for option in gitlab_security_opt %}
+      - "{{ option }}"
+{% endfor %}
+
+{% if gitlab_cap_drop | length > 0 %}
+    cap_drop:
+{% for capability in gitlab_cap_drop %}
+      - "{{ capability }}"
+{% endfor %}
+{% endif %}
+
+
+    # -------------------------------------------------------------------------
+    # Network
+    # -------------------------------------------------------------------------
+    #
+    # Use Docker's normal bridge networking.
+    #
+    # We intentionally do not use:
+    #
+    #   network_mode: host
+    #
+    # GitLab therefore remains isolated in its own container network namespace.
+    # -------------------------------------------------------------------------
+
+    network_mode: "{{ gitlab_container_network_mode }}"
+
+
+    # -------------------------------------------------------------------------
+    # Published ports
+    # -------------------------------------------------------------------------
+    #
+    # HTTP port 80 is intentionally NOT published on the host.
+    #
+    # GitLab is configured for HTTPS and the self-signed certificate is used
+    # directly by bundled NGINX.
+    #
+    # Container:
+    #
+    #   443 -> HTTPS
+    #    22 -> GitLab SSH
+    #
+    # Host:
+    #
+    #   {{ gitlab_https_port }} -> 443
+    #   {{ gitlab_ssh_port }}   -> 22
+    #
+    # -------------------------------------------------------------------------
+
+    ports:
+      - "{{ gitlab_https_port }}:443/tcp"
+      - "{{ gitlab_ssh_port }}:22/tcp"
+
+
+    # -------------------------------------------------------------------------
+    # Persistent storage
+    # -------------------------------------------------------------------------
+    #
+    # GitLab documents these three persistent mounts for Docker installations.
+    # -------------------------------------------------------------------------
+
+    volumes:
+      - type: bind
+        source: "{{ gitlab_config_dir }}"
+        target: /etc/gitlab
+
+      - type: bind
+        source: "{{ gitlab_logs_dir }}"
+        target: /var/log/gitlab
+
+      - type: bind
+        source: "{{ gitlab_data_dir }}"
+        target: /var/opt/gitlab
+
+      - type: bind
+        source: "{{ gitlab_backup_dir }}"
+        target: "{{ gitlab_backup_container_dir }}"
+
+
+    # -------------------------------------------------------------------------
+    # Environment
+    # -------------------------------------------------------------------------
+    #
+    # We intentionally do not put passwords/tokens in environment variables.
+    # Sensitive values will be handled through Ansible Vault and controlled
+    # initialization tasks.
+    #
+    # GITLAB_OMNIBUS_CONFIG is intentionally not used here because our
+    # persistent gitlab.rb is the single source of GitLab application config.
+    # -------------------------------------------------------------------------
+
+    environment: {}
+
+
+    # -------------------------------------------------------------------------
+    # Health check
+    # -------------------------------------------------------------------------
+    #
+    # GitLab exposes /-/health and returns HTTP 200 with "GitLab OK" when the
+    # application is available.
+    #
+    # Because our certificate is self-signed, curl uses -k for this internal
+    # container-local health check.
+    # -------------------------------------------------------------------------
+
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - >-
+          curl --fail --silent --show-error
+          --insecure
+          --max-time 10
+          https://127.0.0.1/-/health
+          >/dev/null
+          || exit 1
+      interval: "{{ gitlab_healthcheck_interval }}"
+      timeout: "{{ gitlab_healthcheck_timeout }}"
+      retries: {{ gitlab_healthcheck_retries }}
+      start_period: "{{ gitlab_healthcheck_start_period }}"
+
+
+    # -------------------------------------------------------------------------
+    # Logging
+    # -------------------------------------------------------------------------
+
+    logging:
+      driver: "{{ gitlab_logging.driver }}"
+      options:
+        max-size: "{{ gitlab_logging.options['max-size'] }}"
+        max-file: "{{ gitlab_logging.options['max-file'] }}"

@@ -1,0 +1,30 @@
+---
+# =============================================================================
+# GitLab secrets
+# =============================================================================
+#
+# THIS FILE MUST BE ENCRYPTED WITH ANSIBLE VAULT.
+#
+# Never store plaintext passwords or tokens in gitlab.yml.
+#
+# =============================================================================
+
+# Initial GitLab administrator password.
+#
+# This will be used during the initial GitLab deployment.
+# The actual value must be replaced with a strong unique password.
+gitlab_root_password: "CHANGE_ME"
+
+# -----------------------------------------------------------------------------
+# Future secrets
+# -----------------------------------------------------------------------------
+#
+# Additional secrets will be added here only when they are actually required.
+#
+# Examples:
+#
+# gitlab_registry_secret:
+# gitlab_backup_encryption_password:
+# gitlab_smtp_password:
+#
+# Do not create unused secrets just for the sake of having them.

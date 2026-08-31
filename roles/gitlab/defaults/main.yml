@@ -1,0 +1,171 @@
+---
+# =============================================================================
+# gitlab role defaults
+# =============================================================================
+#
+# Environment-specific configuration belongs in:
+#
+#   group_vars/gitlab.yml
+#
+# These are implementation defaults for the role.
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Container
+# -----------------------------------------------------------------------------
+
+gitlab_container_name: "gitlab"
+
+gitlab_container_hostname: "{{ gitlab_fqdn }}"
+
+gitlab_container_restart_policy: "{{ gitlab_restart_policy }}"
+
+gitlab_container_shm_size: "{{ gitlab_shm_size }}"
+
+gitlab_container_pids_limit: "{{ gitlab_pids_limit }}"
+
+gitlab_container_privileged: "{{ gitlab_privileged }}"
+
+gitlab_container_network_mode: "{{ gitlab_network_mode }}"
+
+
+# -----------------------------------------------------------------------------
+# Image
+# -----------------------------------------------------------------------------
+
+gitlab_image: >-
+  {{ gitlab_image_repository }}:{{ gitlab_version }}@{{ gitlab_image_digest }}
+
+gitlab_image_pull_policy: "{{ gitlab_image_pull_policy }}"
+
+
+# -----------------------------------------------------------------------------
+# GitLab persistent volumes
+# -----------------------------------------------------------------------------
+
+gitlab_volume_config: "{{ gitlab_config_dir }}:/etc/gitlab"
+gitlab_volume_logs: "{{ gitlab_logs_dir }}:/var/log/gitlab"
+gitlab_volume_data: "{{ gitlab_data_dir }}:/var/opt/gitlab"
+
+
+# -----------------------------------------------------------------------------
+# Network ports
+# -----------------------------------------------------------------------------
+#
+# The container listens on GitLab's standard internal ports:
+#
+#   80  -> HTTP
+#   443 -> HTTPS
+#   22  -> SSH
+#
+# The host-side ports are configurable centrally.
+# -----------------------------------------------------------------------------
+
+gitlab_published_ports:
+  - "{{ gitlab_http_port }}:80"
+  - "{{ gitlab_https_port }}:443"
+  - "{{ gitlab_ssh_port }}:22"
+
+
+# -----------------------------------------------------------------------------
+# Docker security options
+# -----------------------------------------------------------------------------
+
+gitlab_security_opt:
+  - "no-new-privileges:true"
+
+
+# -----------------------------------------------------------------------------
+# Linux capabilities
+# -----------------------------------------------------------------------------
+#
+# We do not blindly drop all capabilities because GitLab Omnibus manages a
+# large number of internal services.
+#
+# The final effective capability set will be validated during deployment.
+# -----------------------------------------------------------------------------
+
+gitlab_cap_drop: []
+
+
+# -----------------------------------------------------------------------------
+# Resource limits
+# -----------------------------------------------------------------------------
+
+gitlab_cpu_limit: "{{ gitlab_cpu_limit }}"
+gitlab_memory_limit: "{{ gitlab_memory_limit }}"
+
+
+# -----------------------------------------------------------------------------
+# Ulimits
+# -----------------------------------------------------------------------------
+
+gitlab_ulimits:
+  nofile:
+    soft: "{{ gitlab_nofile_soft }}"
+    hard: "{{ gitlab_nofile_hard }}"
+
+
+# -----------------------------------------------------------------------------
+# Docker logging
+# -----------------------------------------------------------------------------
+
+gitlab_logging:
+  driver: "json-file"
+  options:
+    max-size: "{{ gitlab_log_max_size }}"
+    max-file: "{{ gitlab_log_max_files | string }}"
+
+
+# -----------------------------------------------------------------------------
+# GitLab configuration
+# -----------------------------------------------------------------------------
+
+gitlab_external_url_config: >-
+  external_url '{{ gitlab_external_url }}'
+
+gitlab_nginx_listen_https: true
+
+gitlab_nginx_redirect_http_to_https: >-
+  {{ gitlab_redirect_http_to_https | ternary("true", "false") }}
+
+
+# -----------------------------------------------------------------------------
+# TLS
+# -----------------------------------------------------------------------------
+
+gitlab_tls_certificate_owner: "root"
+gitlab_tls_certificate_group: "root"
+gitlab_tls_certificate_mode: "0644"
+
+gitlab_tls_private_key_owner: "root"
+gitlab_tls_private_key_group: "root"
+gitlab_tls_private_key_mode: "0600"
+
+
+# -----------------------------------------------------------------------------
+# Health checking
+# -----------------------------------------------------------------------------
+
+gitlab_healthcheck_enabled: true
+
+gitlab_healthcheck_interval: "30s"
+gitlab_healthcheck_timeout: "10s"
+gitlab_healthcheck_retries: 10
+gitlab_healthcheck_start_period: "120s"
+
+
+# -----------------------------------------------------------------------------
+# Deployment behavior
+# -----------------------------------------------------------------------------
+
+# Number of seconds Ansible should wait for GitLab initialization.
+gitlab_startup_wait_seconds: 10
+
+# Maximum number of health-check attempts.
+gitlab_healthcheck_max_attempts: 60
+
+# Delay between health-check attempts.
+gitlab_healthcheck_delay_seconds: 10

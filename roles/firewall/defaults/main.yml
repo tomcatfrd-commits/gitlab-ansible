@@ -1,0 +1,106 @@
+---
+# =============================================================================
+# firewall role defaults
+# =============================================================================
+#
+# The central deployment configuration lives in:
+#
+#   group_vars/gitlab.yml
+#
+# These variables provide safe role defaults and are overridden there when
+# required.
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Firewall implementation
+# -----------------------------------------------------------------------------
+
+firewall_enabled: true
+
+firewall_package: "ufw"
+firewall_package_state: present
+
+
+# -----------------------------------------------------------------------------
+# Default UFW policy
+# -----------------------------------------------------------------------------
+
+firewall_default_incoming_policy: "deny"
+firewall_default_outgoing_policy: "allow"
+firewall_default_routed_policy: "deny"
+
+
+# -----------------------------------------------------------------------------
+# Logging
+# -----------------------------------------------------------------------------
+
+firewall_logging: "medium"
+
+
+# -----------------------------------------------------------------------------
+# IPv6
+# -----------------------------------------------------------------------------
+#
+# Keep IPv6 enabled by default.
+# The deployment can explicitly disable it from the central configuration if
+# the environment requires that.
+# -----------------------------------------------------------------------------
+
+firewall_manage_ipv6: true
+
+
+# -----------------------------------------------------------------------------
+# SSH protection
+# -----------------------------------------------------------------------------
+
+# Existing administrative SSH access is handled first.
+# This is critical to avoid locking ourselves out while enabling UFW.
+firewall_allow_admin_ssh: true
+
+# GitLab SSH is a separate service/port.
+firewall_allow_gitlab_ssh: true
+
+# HTTPS is required for the GitLab web interface.
+firewall_allow_https: true
+
+
+# -----------------------------------------------------------------------------
+# Default UFW rule behavior
+# -----------------------------------------------------------------------------
+
+# Rules managed by this role are explicitly marked for easy identification.
+firewall_rule_comment_prefix: "GitLab deployment"
+
+
+# -----------------------------------------------------------------------------
+# UFW application profile handling
+# -----------------------------------------------------------------------------
+
+# We intentionally do not depend on UFW's "OpenSSH" application profile.
+# The exact configured administrative SSH port is used instead.
+firewall_use_ssh_application_profile: false
+
+
+# -----------------------------------------------------------------------------
+# Docker integration
+# -----------------------------------------------------------------------------
+#
+# Docker-published ports can bypass normal UFW filtering because Docker adds
+# its own iptables/nftables rules.
+#
+# Therefore UFW is NOT treated as the sole security boundary for Docker
+# published ports. We will handle Docker-specific packet filtering separately
+# where required.
+# -----------------------------------------------------------------------------
+
+firewall_manage_docker_rules: true
+
+
+# -----------------------------------------------------------------------------
+# Fail-safe behavior
+# -----------------------------------------------------------------------------
+
+# Refuse to enable the firewall if the administrative SSH port is not known.
+firewall_require_admin_ssh_port: true

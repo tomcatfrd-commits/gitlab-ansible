@@ -1,0 +1,235 @@
+---
+# =============================================================================
+# docker role
+# =============================================================================
+#
+# Responsibilities:
+#   - Install Docker's official APT repository
+#   - Install Docker Engine and Compose v2
+#   - Configure the Docker daemon securely
+#   - Enable and start Docker
+#   - Validate the installation
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Validate host architecture
+# -----------------------------------------------------------------------------
+
+- name: Validate Docker architecture
+  ansible.builtin.assert:
+    that:
+      - ansible_architecture == "x86_64"
+    fail_msg: >-
+      Unsupported architecture for this deployment:
+      {{ ansible_architecture }}.
+      This GitLab deployment expects x86_64/amd64.
+    success_msg: "Docker host architecture validated: x86_64."
+
+
+# -----------------------------------------------------------------------------
+# Install repository prerequisites
+# -----------------------------------------------------------------------------
+
+- name: Install Docker repository prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+    update_cache: true
+    cache_valid_time: "{{ docker_apt_cache_valid_time }}"
+
+
+# -----------------------------------------------------------------------------
+# Docker APT keyring
+# -----------------------------------------------------------------------------
+
+- name: Ensure Docker APT keyring directory exists
+  ansible.builtin.file:
+    path: "{{ docker_apt_keyring_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+
+- name: Download Docker repository signing key
+  ansible.builtin.get_url:
+    url: "{{ docker_apt_key_url }}"
+    dest: "{{ docker_apt_keyring_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+    force: true
+  register: docker_apt_key
+
+
+# -----------------------------------------------------------------------------
+# Docker APT repository
+# -----------------------------------------------------------------------------
+
+- name: Configure Docker APT repository
+  ansible.builtin.deb822_repository:
+    name: docker
+    types:
+      - deb
+    uris:
+      - "{{ docker_apt_repository_url }}"
+    suites:
+      - "{{ ansible_distribution_release }}"
+    components:
+      - stable
+    architectures:
+      - "{{ docker_apt_arch }}"
+    signed_by: "{{ docker_apt_keyring_file }}"
+    state: present
+    enabled: true
+  register: docker_apt_repository
+
+
+- name: Update APT cache after Docker repository changes
+  ansible.builtin.apt:
+    update_cache: true
+  when: docker_apt_key.changed or docker_apt_repository.changed
+
+
+# -----------------------------------------------------------------------------
+# Remove conflicting/legacy Docker packages
+# -----------------------------------------------------------------------------
+
+- name: Remove conflicting Docker packages
+  ansible.builtin.apt:
+    name:
+      - docker.io
+      - docker-compose
+      - docker-doc
+      - podman-docker
+      - containerd
+      - runc
+    state: absent
+    purge: true
+
+
+# -----------------------------------------------------------------------------
+# Install Docker
+# -----------------------------------------------------------------------------
+
+- name: Install Docker Engine and Compose v2
+  ansible.builtin.apt:
+    name: "{{ docker_packages }}"
+    state: "{{ docker_package_state }}"
+    update_cache: "{{ docker_update_apt_cache }}"
+    cache_valid_time: "{{ docker_apt_cache_valid_time }}"
+  notify:
+    - Restart Docker
+
+
+# -----------------------------------------------------------------------------
+# Docker daemon configuration
+# -----------------------------------------------------------------------------
+
+- name: Create Docker configuration directory
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+
+- name: Configure Docker daemon
+  ansible.builtin.template:
+    src: daemon.json.j2
+    dest: "{{ docker_daemon_config_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: >-
+      /usr/bin/python3 -c
+      'import json,sys; json.load(open(sys.argv[1]))'
+      %s
+  notify:
+    - Restart Docker
+
+
+# -----------------------------------------------------------------------------
+# Docker service
+# -----------------------------------------------------------------------------
+
+- name: Ensure Docker service is enabled and running
+  ansible.builtin.systemd_service:
+    name: "{{ docker_service_name }}"
+    enabled: "{{ docker_service_enabled }}"
+    state: started
+
+
+# -----------------------------------------------------------------------------
+# Docker installation validation
+# -----------------------------------------------------------------------------
+
+- name: Wait for Docker socket
+  ansible.builtin.wait_for:
+    path: /var/run/docker.sock
+    state: present
+    timeout: 30
+
+
+- name: Check Docker daemon
+  ansible.builtin.command:
+    cmd: docker info --format '{{ "{{.ServerVersion}}" }}'
+  register: docker_server_version
+  changed_when: false
+  retries: 5
+  delay: 3
+  until: docker_server_version.rc == 0
+  when: docker_validate_installation | bool
+
+
+- name: Display Docker version
+  ansible.builtin.debug:
+    msg: "Docker Engine version: {{ docker_server_version.stdout }}"
+  when:
+    - docker_validate_installation | bool
+    - docker_server_version.rc == 0
+
+
+- name: Check Docker Compose plugin
+  ansible.builtin.command:
+    cmd: docker compose version --short
+  register: docker_compose_version
+  changed_when: false
+  retries: 5
+  delay: 2
+  until: docker_compose_version.rc == 0
+  when: docker_validate_installation | bool
+
+
+- name: Display Docker Compose version
+  ansible.builtin.debug:
+    msg: "Docker Compose version: {{ docker_compose_version.stdout }}"
+  when:
+    - docker_validate_installation | bool
+    - docker_compose_version.rc == 0
+
+
+# -----------------------------------------------------------------------------
+# Docker socket permissions
+# -----------------------------------------------------------------------------
+#
+# We deliberately do NOT add the Ansible user to the docker group.
+#
+# Membership of the docker group effectively grants root-equivalent control
+# over the host through the Docker daemon.
+#
+# Ansible uses sudo/become for Docker administration instead.
+# -----------------------------------------------------------------------------
+
+- name: Ensure Docker socket has root ownership
+  ansible.builtin.file:
+    path: /var/run/docker.sock
+    owner: root
+    group: docker
+    mode: "0660"

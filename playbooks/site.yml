@@ -1,0 +1,32 @@
+---
+# =============================================================================
+# GitLab deployment - main playbook
+# =============================================================================
+#
+# This is the primary entry point for the complete deployment.
+#
+# Execution flow:
+#
+#   1. Host preparation
+#   2. Docker installation/configuration
+#   3. Firewall configuration
+#   4. GitLab deployment and TLS
+#   5. GitLab hardening
+#   6. Backup configuration
+#
+# Individual stages can also be executed independently through their
+# dedicated playbooks.
+#
+# =============================================================================
+
+- name: Prepare GitLab host
+  ansible.builtin.import_playbook: prepare.yml
+
+- name: Deploy GitLab
+  ansible.builtin.import_playbook: deploy.yml
+
+- name: Harden GitLab
+  ansible.builtin.import_playbook: harden.yml
+
+- name: Configure GitLab backups
+  ansible.builtin.import_playbook: backup.yml

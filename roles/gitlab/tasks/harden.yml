@@ -1,0 +1,255 @@
+---
+# =============================================================================
+# GitLab application hardening
+# =============================================================================
+#
+# GitLab application-level security settings are managed through
+# Gitlab::CurrentSettings.
+#
+# Omnibus/system configuration remains in:
+#
+#   /etc/gitlab/gitlab.rb
+#
+# Application settings are stored by GitLab itself.
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Verify Rails is available
+# -----------------------------------------------------------------------------
+
+- name: Verify GitLab Rails is available
+  ansible.builtin.command:
+    cmd: >-
+      docker exec
+      {{ gitlab_container_name }}
+      gitlab-rails runner
+      'puts Gitlab::CurrentSettings.class.name'
+  register: gitlab_rails_check
+  changed_when: false
+  retries: 30
+  delay: 10
+  until:
+    - gitlab_rails_check.rc == 0
+
+
+# -----------------------------------------------------------------------------
+# Disable public sign-up
+# -----------------------------------------------------------------------------
+
+- name: Read GitLab sign-up setting
+  ansible.builtin.command:
+    cmd: >-
+      docker exec
+      {{ gitlab_container_name }}
+      gitlab-rails runner
+      'puts Gitlab::CurrentSettings.signup_enabled'
+  register: gitlab_signup_current
+  changed_when: false
+
+
+- name: Disable GitLab public sign-up
+  ansible.builtin.command:
+    cmd: >-
+      docker exec
+      {{ gitlab_container_name }}
+      gitlab-rails runner
+      'Gitlab::CurrentSettings.update!(signup_enabled: false)'
+  when:
+    - not gitlab_signup_enabled | bool
+    - gitlab_signup_current.stdout | trim | lower != "false"
+  notify:
+    - Verify GitLab application settings
+
+
+# -----------------------------------------------------------------------------
+# Admin Mode
+# -----------------------------------------------------------------------------
+
+- name: Read GitLab Admin Mode setting
+  ansible.builtin.command:
+    cmd: >-
+      docker exec
+      {{ gitlab_container_name }}
+      gitlab-rails runner
+      'puts Gitlab::CurrentSettings.admin_mode'
+  register: gitlab_admin_mode_current
+  changed_when: false
+
+
+- name: Enable GitLab Admin Mode
+  ansible.builtin.command:
+    cmd: >-
+      docker exec
+      {{ gitlab_container_name }}
+      gitlab-rails runner
+      'Gitlab::CurrentSettings.update!(admin_mode: true)'
+  when:
+    - gitlab_admin_mode_enabled | bool
+    - gitlab_admin_mode_current.stdout | trim | lower != "true"
+  notify:
+    - Verify GitLab application settings
+
+
+# -----------------------------------------------------------------------------
+# Mandatory 2FA for all users
+# -----------------------------------------------------------------------------
+
+- name: Read GitLab global 2FA setting
+  ansible.builtin.command:
+    cmd: >-
+      docker exec
+      {{ gitlab_container_name }}
+      gitlab-rails runner
+      'puts Gitlab::CurrentSettings.require_two_factor_authentication'
+  register: gitlab_2fa_current
+  changed_when: false
+
+
+- name: Enable mandatory GitLab 2FA
+  ansible.builtin.command:
+    cmd: >-
+      docker exec
+      {{ gitlab_container_name }}
+      gitlab-rails runner
+      'Gitlab::CurrentSettings.update!(
+      require_two_factor_authentication: true,
+      two_factor_grace_period: {{ gitlab_two_factor_grace_period_hours | int }}
+      )'
+  when:
+    - gitlab_require_two_factor_authentication | bool
+    - gitlab_2fa_current.stdout | trim | lower != "true"
+  notify:
+    - Verify GitLab application settings
+
+
+# -----------------------------------------------------------------------------
+# Mandatory 2FA for administrators
+# -----------------------------------------------------------------------------
+
+- name: Read administrator 2FA setting
+  ansible.builtin.command:
+    cmd: >-
+      docker exec
+      {{ gitlab_container_name }}
+      gitlab-rails runner
+      'puts Gitlab::CurrentSettings.require_admin_two_factor_authentication'
+  register: gitlab_admin_2fa_current
+  changed_when: false
+
+
+- name: Enable mandatory administrator 2FA
+  ansible.builtin.command:
+    cmd: >-
+      docker exec
+      {{ gitlab_container_name }}
+      gitlab-rails runner
+      'Gitlab::CurrentSettings.update!(
+      require_admin_two_factor_authentication: true
+      )'
+  when:
+    - gitlab_require_two_factor_authentication | bool
+    - gitlab_admin_2fa_current.stdout | trim | lower != "true"
+  notify:
+    - Verify GitLab application settings
+
+
+# -----------------------------------------------------------------------------
+# Unknown sign-in notifications
+# -----------------------------------------------------------------------------
+
+- name: Read unknown sign-in notification setting
+  ansible.builtin.command:
+    cmd: >-
+      docker exec
+      {{ gitlab_container_name }}
+      gitlab-rails runner
+      'puts Gitlab::CurrentSettings.notify_on_unknown_sign_in'
+  register: gitlab_unknown_signin_current
+  changed_when: false
+
+
+- name: Enable unknown sign-in notifications
+  ansible.builtin.command:
+    cmd: >-
+      docker exec
+      {{ gitlab_container_name }}
+      gitlab-rails runner
+      'Gitlab::CurrentSettings.update!(notify_on_unknown_sign_in: true)'
+  when:
+    - gitlab_unknown_signin_notifications | bool
+    - gitlab_unknown_signin_current.stdout | trim | lower != "true"
+  notify:
+    - Verify GitLab application settings
+
+
+# -----------------------------------------------------------------------------
+# Personal access token expiry
+# -----------------------------------------------------------------------------
+
+- name: Read personal access token expiry setting
+  ansible.builtin.command:
+    cmd: >-
+      docker exec
+      {{ gitlab_container_name }}
+      gitlab-rails runner
+      'puts Gitlab::CurrentSettings.require_personal_access_token_expiry'
+  register: gitlab_pat_expiry_current
+  changed_when: false
+
+
+- name: Require personal access token expiry
+  ansible.builtin.command:
+    cmd: >-
+      docker exec
+      {{ gitlab_container_name }}
+      gitlab-rails runner
+      'Gitlab::CurrentSettings.update!(
+      require_personal_access_token_expiry: true
+      )'
+  when:
+    - gitlab_require_personal_access_token_expiry | bool
+    - gitlab_pat_expiry_current.stdout | trim | lower != "true"
+  notify:
+    - Verify GitLab application settings
+
+
+# -----------------------------------------------------------------------------
+# Final verification
+# -----------------------------------------------------------------------------
+
+- name: Read final GitLab security settings
+  ansible.builtin.command:
+    cmd: >-
+      docker exec
+      {{ gitlab_container_name }}
+      gitlab-rails runner
+      's = Gitlab::CurrentSettings;
+      puts({
+        signup_enabled: s.signup_enabled,
+        admin_mode: s.admin_mode,
+        require_two_factor_authentication: s.require_two_factor_authentication,
+        two_factor_grace_period: s.two_factor_grace_period,
+        require_admin_two_factor_authentication: s.require_admin_two_factor_authentication,
+        notify_on_unknown_sign_in: s.notify_on_unknown_sign_in,
+        require_personal_access_token_expiry: s.require_personal_access_token_expiry
+      }.to_json)'
+  register: gitlab_security_settings
+  changed_when: false
+  no_log: true
+
+
+- name: Verify required GitLab security settings
+  ansible.builtin.assert:
+    that:
+      - (gitlab_security_settings.stdout | from_json).signup_enabled == false
+      - (gitlab_security_settings.stdout | from_json).admin_mode == (gitlab_admin_mode_enabled | bool)
+      - (gitlab_security_settings.stdout | from_json).require_two_factor_authentication == (gitlab_require_two_factor_authentication | bool)
+      - (gitlab_security_settings.stdout | from_json).require_admin_two_factor_authentication == (gitlab_require_two_factor_authentication | bool)
+      - (gitlab_security_settings.stdout | from_json).notify_on_unknown_sign_in == (gitlab_unknown_signin_notifications | bool)
+      - (gitlab_security_settings.stdout | from_json).require_personal_access_token_expiry == (gitlab_require_personal_access_token_expiry | bool)
+    fail_msg: >-
+      One or more GitLab application security settings do not match the
+      configured security policy.
+    success_msg: "GitLab application security settings verified."

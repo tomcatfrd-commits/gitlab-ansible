@@ -1,0 +1,90 @@
+# =============================================================================
+# Ansible project
+# =============================================================================
+
+# Local Ansible collections installed by requirements.yml
+collections/
+
+# Ansible runtime files
+*.retry
+.ansible/
+ansible/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Editor / IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local environment / overrides
+.env
+.env.*
+!.env.example
+
+
+# =============================================================================
+# Ansible Vault
+# =============================================================================
+
+# Do NOT ignore the encrypted vault file.
+#
+# group_vars/gitlab_vault.yml
+# MUST remain in the repository once encrypted.
+#
+# Only ignore accidental unencrypted/decrypted variants.
+# =============================================================================
+
+group_vars/*vault*.clear.yml
+group_vars/*vault*.plain.yml
+group_vars/*vault*.decrypted.yml
+
+
+# =============================================================================
+# Generated GitLab deployment files
+# =============================================================================
+
+# These are generated on the managed GitLab server and should not be committed
+# from the Ansible project.
+generated/
+tmp/
+temp/
+
+
+# =============================================================================
+# Secrets and cryptographic material
+# =============================================================================
+
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Certificate signing requests
+*.csr
+
+# Private key backups
+*.key.bak
+
+# Local certificate directories
+certs/
+secrets/
+
+
+# =============================================================================
+# Logs
+# =============================================================================
+
+*.log
+logs/
+
+
+# =============================================================================
+# Operating-system files
+# =============================================================================
+
+.DS_Store
+Thumbs.db

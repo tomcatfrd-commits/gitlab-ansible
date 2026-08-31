@@ -1,0 +1,15 @@
+---
+# =============================================================================
+# docker role handlers
+# =============================================================================
+#
+# Handlers run only when a notifying task reports a change.
+# This prevents unnecessary Docker daemon restarts.
+#
+# =============================================================================
+
+- name: Restart Docker
+  ansible.builtin.systemd_service:
+    name: "{{ docker_service_name }}"
+    state: restarted
+    daemon_reload: true

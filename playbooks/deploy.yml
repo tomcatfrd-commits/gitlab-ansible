@@ -1,0 +1,69 @@
+---
+# =============================================================================
+# GitLab deployment
+# =============================================================================
+#
+# Responsibilities:
+#   - Prepare GitLab directories
+#   - Generate self-signed TLS material
+#   - Render GitLab configuration
+#   - Render Docker Compose configuration
+#   - Pull the pinned GitLab image
+#   - Start/reconcile the GitLab container
+#   - Wait for GitLab to become healthy
+#
+# Security-related hardening is intentionally handled by harden.yml after the
+# initial service deployment has successfully completed.
+#
+# =============================================================================
+
+- name: Deploy GitLab
+  hosts: gitlab
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+
+    - name: Validate required GitLab deployment variables
+      ansible.builtin.assert:
+        that:
+          - gitlab_fqdn | length > 0
+          - gitlab_version | length > 0
+          - gitlab_image_repository | length > 0
+          - gitlab_image_digest | length > 0
+          - gitlab_root_dir | length > 0
+          - gitlab_compose_dir | length > 0
+          - gitlab_config_dir | length > 0
+          - gitlab_logs_dir | length > 0
+          - gitlab_data_dir | length > 0
+        fail_msg: >-
+          One or more required GitLab deployment variables are missing.
+          Review group_vars/gitlab.yml.
+        success_msg: "Required GitLab deployment variables are present."
+
+    - name: Validate GitLab ports
+      ansible.builtin.assert:
+        that:
+          - gitlab_https_port | int > 0
+          - gitlab_https_port | int < 65536
+          - gitlab_ssh_port | int > 0
+          - gitlab_ssh_port | int < 65536
+          - ansible_port | int > 0
+          - ansible_port | int < 65536
+        fail_msg: "One or more configured ports are invalid."
+        success_msg: "GitLab and administrative SSH ports validated."
+
+    - name: Validate distinct administrative and GitLab SSH ports
+      ansible.builtin.assert:
+        that:
+          - ansible_port | int != gitlab_ssh_port | int
+        fail_msg: >-
+          Administrative SSH port and GitLab SSH port are identical.
+          Use separate ports to avoid conflicting SSH services.
+        success_msg: >-
+          Administrative SSH port {{ ansible_port }} and GitLab SSH port
+          {{ gitlab_ssh_port }} are distinct.
+
+  roles:
+
+    - role: gitlab

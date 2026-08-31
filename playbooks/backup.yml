@@ -1,0 +1,44 @@
+---
+# =============================================================================
+# GitLab backup configuration
+# =============================================================================
+#
+# Responsibilities:
+#   - Configure GitLab's native backup mechanism
+#   - Ensure the backup destination exists
+#   - Configure retention
+#   - Configure backup scheduling when explicitly enabled
+#
+# Backups are disabled initially through:
+#
+#   gitlab_backup_enabled: false
+#
+# The backup role remains idempotent and can be enabled later by changing
+# only the central configuration file:
+#
+#   group_vars/gitlab.yml
+#
+# =============================================================================
+
+- name: Configure GitLab backups
+  hosts: gitlab
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+
+    - name: Validate backup configuration
+      ansible.builtin.assert:
+        that:
+          - gitlab_backup_dir | length > 0
+          - gitlab_backup_retention_days | int > 0
+        fail_msg: >-
+          Invalid GitLab backup configuration.
+          Review gitlab_backup_dir and gitlab_backup_retention_days in
+          group_vars/gitlab.yml.
+        success_msg: "GitLab backup configuration validated."
+
+  roles:
+
+    - role: gitlab_backup
+      when: gitlab_backup_enabled | bool

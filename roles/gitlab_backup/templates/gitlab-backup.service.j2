@@ -1,0 +1,27 @@
+[Unit]
+Description=GitLab native backup
+Documentation=https://docs.gitlab.com/administration/backup_restore/
+
+Requires=docker.service
+After=docker.service
+
+ConditionPathIsDirectory={{ gitlab_backup_dir }}
+
+
+[Service]
+Type=oneshot
+
+# Run GitLab's native backup mechanism inside the GitLab container.
+ExecStart=/usr/bin/docker exec \
+          --user root \
+          {{ gitlab_container_name }} \
+          {{ gitlab_backup_command }}
+
+# Do not retain additional privileges.
+NoNewPrivileges=true
+
+# Prevent an indefinitely running backup process.
+TimeoutStartSec=2h
+
+# The service represents a single backup operation.
+RemainAfterExit=no

@@ -1,0 +1,45 @@
+---
+# =============================================================================
+# GitLab hardening
+# =============================================================================
+#
+# This playbook applies security controls after the initial GitLab deployment
+# has completed successfully.
+#
+# Responsibilities:
+#   - Validate that GitLab is running before hardening
+#   - Apply GitLab application-level hardening
+#   - Apply Docker/container security controls where supported
+#   - Reconfigure GitLab only when relevant configuration changes
+#   - Validate the resulting service
+#
+# The actual implementation remains inside roles.
+#
+# =============================================================================
+
+- name: Harden GitLab server
+  hosts: gitlab
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+
+    - name: Verify GitLab container exists
+      community.docker.docker_container_info:
+        name: gitlab
+      register: gitlab_container_info
+
+    - name: Verify GitLab container is running
+      ansible.builtin.assert:
+        that:
+          - gitlab_container_info.exists | bool
+          - gitlab_container_info.container.State.Running | default(false) | bool
+        fail_msg: >-
+          GitLab container is not running.
+          Complete the deployment successfully before applying hardening.
+        success_msg: "GitLab container is running."
+
+  roles:
+
+    - role: gitlab
+      tasks_from: harden

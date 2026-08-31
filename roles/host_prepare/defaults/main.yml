@@ -1,0 +1,98 @@
+---
+# =============================================================================
+# host_prepare role defaults
+# =============================================================================
+#
+# These are safe role defaults.
+#
+# Environment-specific values belong in:
+#
+#   group_vars/gitlab.yml
+#
+# Defaults here exist so the role remains reusable and does not require every
+# variable to be explicitly defined by the inventory.
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Package management
+# -----------------------------------------------------------------------------
+
+host_prepare_packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - lsb-release
+  - apt-transport-https
+  - software-properties-common
+  - openssl
+  - jq
+  - python3
+  - python3-pip
+
+
+# -----------------------------------------------------------------------------
+# Time synchronization
+# -----------------------------------------------------------------------------
+
+host_prepare_enable_time_sync: true
+
+host_prepare_time_package: "chrony"
+
+host_prepare_time_service: "chrony"
+
+
+# -----------------------------------------------------------------------------
+# System prerequisites
+# -----------------------------------------------------------------------------
+
+# The role validates these values against Ansible facts before making changes.
+host_prepare_min_vcpus: "{{ gitlab_expected_vcpus | default(2) }}"
+host_prepare_min_memory_mb: "{{ gitlab_expected_memory_mb | default(4096) }}"
+
+
+# -----------------------------------------------------------------------------
+# Swap
+# -----------------------------------------------------------------------------
+#
+# We do not automatically disable swap in the first implementation.
+#
+# GitLab benefits from adequate RAM and GitLab's installation requirements
+# recommend avoiding swap where possible, but automatically deleting an
+# existing swap configuration could be disruptive.
+#
+# We will inspect the current swap configuration first and handle this through
+# an explicit configuration option.
+# -----------------------------------------------------------------------------
+
+host_prepare_manage_swap: false
+
+
+# -----------------------------------------------------------------------------
+# Kernel parameters
+# -----------------------------------------------------------------------------
+
+host_prepare_sysctl:
+  vm.max_map_count: 262144
+
+
+# -----------------------------------------------------------------------------
+# Filesystem
+# -----------------------------------------------------------------------------
+
+# Deployment data is kept below the configured user's home directory.
+host_prepare_create_gitlab_root: true
+
+
+# -----------------------------------------------------------------------------
+# Automatic package upgrades
+# -----------------------------------------------------------------------------
+#
+# We do not enable unattended-upgrades automatically at this stage.
+#
+# This is a deliberate operational decision because automatic package upgrades
+# on a GitLab host should be coordinated with the GitLab/Docker upgrade policy.
+# -----------------------------------------------------------------------------
+
+host_prepare_enable_unattended_upgrades: false

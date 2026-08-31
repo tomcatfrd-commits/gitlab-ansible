@@ -1,0 +1,185 @@
+---
+# =============================================================================
+# GitLab TLS configuration
+# =============================================================================
+#
+# Generates:
+#
+#   {{ gitlab_tls_private_key_file }}
+#   {{ gitlab_tls_certificate_file }}
+#
+# The private key is generated directly on the managed GitLab host and is
+# never stored in the Ansible project.
+#
+# Certificate:
+#   - RSA 4096-bit key
+#   - SHA-256 signature
+#   - Self-signed
+#   - Server authentication
+#   - SAN contains the GitLab FQDN
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Validate TLS configuration
+# -----------------------------------------------------------------------------
+
+- name: Validate GitLab TLS hostname
+  ansible.builtin.assert:
+    that:
+      - gitlab_fqdn is defined
+      - gitlab_fqdn | trim | length > 0
+      - gitlab_fqdn != "CHANGE_ME"
+      - gitlab_tls_common_name == gitlab_fqdn
+    fail_msg: >-
+      GitLab TLS hostname configuration is invalid.
+      Verify gitlab_fqdn and gitlab_tls_common_name in
+      group_vars/gitlab.yml.
+    success_msg: "GitLab TLS hostname configuration validated."
+
+
+- name: Validate TLS key size
+  ansible.builtin.assert:
+    that:
+      - gitlab_tls_key_size | int >= 2048
+    fail_msg: >-
+      TLS RSA key size must be at least 2048 bits.
+    success_msg: >-
+      TLS key size validated: {{ gitlab_tls_key_size }} bits.
+
+
+# -----------------------------------------------------------------------------
+# TLS directory
+# -----------------------------------------------------------------------------
+
+- name: Ensure GitLab TLS directory exists
+  ansible.builtin.file:
+    path: "{{ gitlab_tls_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+
+# -----------------------------------------------------------------------------
+# Private key
+# -----------------------------------------------------------------------------
+#
+# The key is generated on the target host.
+#
+# No key content is registered or displayed.
+# -----------------------------------------------------------------------------
+
+- name: Generate GitLab TLS private key
+  community.crypto.openssl_privatekey:
+    path: "{{ gitlab_tls_private_key_file }}"
+    type: RSA
+    size: "{{ gitlab_tls_key_size }}"
+    mode: "{{ gitlab_tls_private_key_mode }}"
+    owner: "{{ gitlab_tls_private_key_owner }}"
+    group: "{{ gitlab_tls_private_key_group }}"
+    state: present
+  no_log: true
+  notify:
+    - Reconfigure GitLab
+
+
+# -----------------------------------------------------------------------------
+# Certificate signing request
+# -----------------------------------------------------------------------------
+
+- name: Generate GitLab TLS CSR
+  community.crypto.openssl_csr_pipe:
+    privatekey_path: "{{ gitlab_tls_private_key_file }}"
+    common_name: "{{ gitlab_tls_common_name }}"
+    organization_name: "GitLab"
+    subject_alt_name:
+      - "DNS:{{ gitlab_fqdn }}"
+    key_usage:
+      - digitalSignature
+      - keyEncipherment
+    extended_key_usage:
+      - serverAuth
+    basic_constraints:
+      - "CA:FALSE"
+    create_subject_key_identifier: true
+  register: gitlab_tls_csr
+  changed_when: false
+  no_log: true
+
+
+# -----------------------------------------------------------------------------
+# Self-signed certificate
+# -----------------------------------------------------------------------------
+
+- name: Generate GitLab self-signed certificate
+  community.crypto.x509_certificate:
+    path: "{{ gitlab_tls_certificate_file }}"
+    csr_content: "{{ gitlab_tls_csr.csr }}"
+    privatekey_path: "{{ gitlab_tls_private_key_file }}"
+    provider: selfsigned
+    selfsigned_digest: sha256
+    selfsigned_not_after: "+825d"
+    selfsigned_not_before: "+0s"
+    selfsigned_version: 3
+    mode: "{{ gitlab_tls_certificate_mode }}"
+    owner: "{{ gitlab_tls_certificate_owner }}"
+    group: "{{ gitlab_tls_certificate_group }}"
+    state: present
+  no_log: true
+  notify:
+    - Reconfigure GitLab
+
+
+# -----------------------------------------------------------------------------
+# Verify certificate exists
+# -----------------------------------------------------------------------------
+
+- name: Inspect GitLab TLS certificate
+  community.crypto.x509_certificate_info:
+    path: "{{ gitlab_tls_certificate_file }}"
+  register: gitlab_tls_certificate_info
+  changed_when: false
+
+
+# -----------------------------------------------------------------------------
+# Verify certificate properties
+# -----------------------------------------------------------------------------
+
+- name: Validate GitLab certificate
+  ansible.builtin.assert:
+    that:
+      - gitlab_tls_certificate_info.exists
+      - gitlab_tls_certificate_info.public_key_algorithm == "rsa"
+      - gitlab_tls_certificate_info.signature_algorithm == "sha256WithRSAEncryption"
+      - gitlab_tls_certificate_info.subject.commonName == gitlab_fqdn
+      - "'DNS:" ~ gitlab_fqdn in gitlab_tls_certificate_info.subject_alt_name
+      - not gitlab_tls_certificate_info.basic_constraints_ca
+    fail_msg: >-
+      Generated GitLab TLS certificate failed validation.
+    success_msg: >-
+      GitLab TLS certificate validated successfully.
+
+
+# -----------------------------------------------------------------------------
+# Verify private-key permissions
+# -----------------------------------------------------------------------------
+
+- name: Inspect GitLab TLS private key
+  ansible.builtin.stat:
+    path: "{{ gitlab_tls_private_key_file }}"
+  register: gitlab_tls_private_key_stat
+
+
+- name: Validate GitLab TLS private-key permissions
+  ansible.builtin.assert:
+    that:
+      - gitlab_tls_private_key_stat.stat.exists
+      - gitlab_tls_private_key_stat.stat.pw_name == "root"
+      - gitlab_tls_private_key_stat.stat.gr_name == "root"
+      - gitlab_tls_private_key_stat.stat.mode[-3:] == "600"
+    fail_msg: >-
+      GitLab TLS private key ownership or permissions are insecure.
+    success_msg: >-
+      GitLab TLS private key permissions validated.

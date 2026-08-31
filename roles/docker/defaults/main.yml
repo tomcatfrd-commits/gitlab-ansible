@@ -1,0 +1,139 @@
+---
+# =============================================================================
+# docker role defaults
+# =============================================================================
+#
+# Environment-specific values belong in:
+#
+#   group_vars/gitlab.yml
+#
+# These values define safe, reusable defaults for the Docker role.
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Docker Engine
+# -----------------------------------------------------------------------------
+
+docker_package_state: present
+
+docker_service_name: docker
+
+docker_service_enabled: true
+
+
+# -----------------------------------------------------------------------------
+# Docker repository
+# -----------------------------------------------------------------------------
+
+docker_apt_arch: "amd64"
+
+docker_apt_repository_url: "https://download.docker.com/linux/ubuntu"
+
+docker_apt_key_url: "https://download.docker.com/linux/ubuntu/gpg"
+
+docker_apt_keyring_dir: "/etc/apt/keyrings"
+
+docker_apt_keyring_file: "{{ docker_apt_keyring_dir }}/docker.asc"
+
+docker_apt_source_file: "/etc/apt/sources.list.d/docker.list"
+
+
+# -----------------------------------------------------------------------------
+# Docker packages
+# -----------------------------------------------------------------------------
+
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+
+
+# -----------------------------------------------------------------------------
+# Docker daemon
+# -----------------------------------------------------------------------------
+
+docker_daemon_config_file: "/etc/docker/daemon.json"
+
+# Keep Docker's default bridge networking unless explicitly changed.
+docker_bridge: "none"
+
+# JSON-file logging with rotation.
+docker_log_driver: "json-file"
+
+docker_log_opts:
+  max-size: "50m"
+  max-file: "5"
+
+# Do not expose Docker's API over TCP.
+docker_hosts:
+  - "unix:///var/run/docker.sock"
+
+# Enable live restore so containers can remain running during Docker daemon
+# restarts where supported.
+docker_live_restore: true
+
+# Disable Docker's userland proxy where appropriate.
+#
+# This reduces an extra networking component, but we will validate the effect
+# on GitLab's published ports before final deployment.
+docker_userland_proxy: false
+
+
+# -----------------------------------------------------------------------------
+# Docker data root
+# -----------------------------------------------------------------------------
+
+# Keep Docker's own operational data in the standard location.
+#
+# GitLab application data itself remains under the deployment user's home
+# directory and is mounted into the GitLab container.
+docker_data_root: "/var/lib/docker"
+
+
+# -----------------------------------------------------------------------------
+# Docker security
+# -----------------------------------------------------------------------------
+
+# Keep Docker's default seccomp profile.
+docker_seccomp_profile: "default"
+
+# Do not enable insecure Docker TCP socket access.
+docker_expose_tcp_socket: false
+
+# Do not enable experimental Docker features.
+docker_experimental: false
+
+
+# -----------------------------------------------------------------------------
+# Package update behavior
+# -----------------------------------------------------------------------------
+
+# Do not automatically upgrade Docker on every Ansible execution.
+#
+# Docker upgrades can affect the running GitLab stack and should be explicit.
+docker_apt_upgrade: false
+
+
+# -----------------------------------------------------------------------------
+# Installation behavior
+# -----------------------------------------------------------------------------
+
+# Update APT metadata before installing Docker packages.
+docker_update_apt_cache: true
+
+docker_apt_cache_valid_time: 3600
+
+
+# -----------------------------------------------------------------------------
+# Validation
+# -----------------------------------------------------------------------------
+
+# Verify Docker after installation.
+docker_validate_installation: true
+
+# Minimum expected Docker API version is intentionally not hard-coded here.
+# Compatibility will be validated through the Docker Compose deployment.

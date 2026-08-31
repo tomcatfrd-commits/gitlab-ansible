@@ -1,0 +1,8 @@
+{
+  "live-restore": {{ docker_live_restore | bool | to_json }},
+  "userland-proxy": {{ docker_userland_proxy | bool | to_json }},
+  "log-driver": {{ docker_log_driver | to_json }},
+  "log-opts": {{ docker_log_opts | to_json }},
+  "experimental": {{ docker_experimental | bool | to_json }},
+  "data-root": {{ docker_data_root | to_json }}
+}

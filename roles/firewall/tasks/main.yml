@@ -1,0 +1,234 @@
+---
+# =============================================================================
+# firewall role
+# =============================================================================
+#
+# Responsibilities:
+#   - Install UFW
+#   - Establish a deny-by-default inbound policy
+#   - Preserve administrative SSH access
+#   - Allow GitLab HTTPS
+#   - Allow GitLab SSH
+#   - Enable UFW only after required rules exist
+#   - Validate the resulting firewall state
+#
+# Docker-specific filtering is intentionally NOT implemented here yet.
+# Docker-published ports require separate handling because Docker manages its
+# own packet-filtering rules.
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Validate required firewall variables
+# -----------------------------------------------------------------------------
+
+- name: Validate administrative SSH port
+  ansible.builtin.assert:
+    that:
+      - ansible_port is defined
+      - ansible_port | int > 0
+      - ansible_port | int < 65536
+    fail_msg: >-
+      A valid administrative SSH port is required before UFW can be enabled.
+    success_msg: >-
+      Administrative SSH port validated: {{ ansible_port }}.
+
+
+- name: Validate GitLab HTTPS port
+  ansible.builtin.assert:
+    that:
+      - gitlab_https_port | int > 0
+      - gitlab_https_port | int < 65536
+    fail_msg: >-
+      Invalid GitLab HTTPS port: {{ gitlab_https_port }}.
+    success_msg: >-
+      GitLab HTTPS port validated: {{ gitlab_https_port }}.
+
+
+- name: Validate GitLab SSH port
+  ansible.builtin.assert:
+    that:
+      - gitlab_ssh_port | int > 0
+      - gitlab_ssh_port | int < 65536
+    fail_msg: >-
+      Invalid GitLab SSH port: {{ gitlab_ssh_port }}.
+    success_msg: >-
+      GitLab SSH port validated: {{ gitlab_ssh_port }}.
+
+
+- name: Validate unique SSH ports
+  ansible.builtin.assert:
+    that:
+      - ansible_port | int != gitlab_ssh_port | int
+    fail_msg: >-
+      Administrative SSH port ({{ ansible_port }}) and GitLab SSH port
+      ({{ gitlab_ssh_port }}) must be different.
+    success_msg: >-
+      Administrative SSH and GitLab SSH ports are distinct.
+
+
+# -----------------------------------------------------------------------------
+# Install UFW
+# -----------------------------------------------------------------------------
+
+- name: Install UFW
+  ansible.builtin.apt:
+    name: "{{ firewall_package }}"
+    state: "{{ firewall_package_state }}"
+    update_cache: true
+    cache_valid_time: 3600
+
+
+# -----------------------------------------------------------------------------
+# Configure UFW defaults
+# -----------------------------------------------------------------------------
+
+- name: Set UFW default incoming policy
+  community.general.ufw:
+    direction: incoming
+    policy: "{{ firewall_default_incoming_policy }}"
+
+
+- name: Set UFW default outgoing policy
+  community.general.ufw:
+    direction: outgoing
+    policy: "{{ firewall_default_outgoing_policy }}"
+
+
+- name: Set UFW default routed policy
+  community.general.ufw:
+    direction: routed
+    policy: "{{ firewall_default_routed_policy }}"
+
+
+# -----------------------------------------------------------------------------
+# Configure UFW logging
+# -----------------------------------------------------------------------------
+
+- name: Configure UFW logging
+  community.general.ufw:
+    logging: "{{ firewall_logging }}"
+
+
+# -----------------------------------------------------------------------------
+# Administrative SSH
+# -----------------------------------------------------------------------------
+#
+# This rule is created BEFORE UFW is enabled.
+# The exact configured administrative SSH port is used instead of the generic
+# OpenSSH application profile.
+# -----------------------------------------------------------------------------
+
+- name: Allow administrative SSH
+  community.general.ufw:
+    rule: allow
+    direction: in
+    proto: tcp
+    port: "{{ ansible_port }}"
+    comment: "{{ firewall_rule_comment_prefix }} - administrative SSH"
+  when: firewall_allow_admin_ssh | bool
+
+
+# -----------------------------------------------------------------------------
+# GitLab HTTPS
+# -----------------------------------------------------------------------------
+
+- name: Allow GitLab HTTPS
+  community.general.ufw:
+    rule: allow
+    direction: in
+    proto: tcp
+    port: "{{ gitlab_https_port }}"
+    comment: "{{ firewall_rule_comment_prefix }} - GitLab HTTPS"
+  when: firewall_allow_https | bool
+
+
+# -----------------------------------------------------------------------------
+# GitLab SSH
+# -----------------------------------------------------------------------------
+
+- name: Allow GitLab SSH
+  community.general.ufw:
+    rule: allow
+    direction: in
+    proto: tcp
+    port: "{{ gitlab_ssh_port }}"
+    comment: "{{ firewall_rule_comment_prefix }} - GitLab SSH"
+  when: firewall_allow_gitlab_ssh | bool
+
+
+# -----------------------------------------------------------------------------
+# IPv6
+# -----------------------------------------------------------------------------
+#
+# UFW handles IPv6 through /etc/default/ufw.
+# We do not disable IPv6 here.
+# -----------------------------------------------------------------------------
+
+- name: Verify UFW IPv6 configuration
+  ansible.builtin.command:
+    cmd: grep -E '^IPV6=' /etc/default/ufw
+  register: firewall_ipv6_setting
+  changed_when: false
+  failed_when: false
+  when: firewall_manage_ipv6 | bool
+
+
+- name: Display UFW IPv6 configuration
+  ansible.builtin.debug:
+    msg: "{{ firewall_ipv6_setting.stdout }}"
+  when:
+    - firewall_manage_ipv6 | bool
+    - firewall_ipv6_setting.rc == 0
+
+
+# -----------------------------------------------------------------------------
+# Enable UFW
+# -----------------------------------------------------------------------------
+#
+# Required SSH rules have already been created.
+# -----------------------------------------------------------------------------
+
+- name: Enable UFW
+  community.general.ufw:
+    state: enabled
+
+
+# -----------------------------------------------------------------------------
+# Validate firewall state
+# -----------------------------------------------------------------------------
+
+- name: Query UFW status
+  ansible.builtin.command:
+    cmd: ufw status verbose
+  register: firewall_status
+  changed_when: false
+
+
+- name: Display UFW status
+  ansible.builtin.debug:
+    var: firewall_status.stdout_lines
+
+
+- name: Verify UFW is active
+  ansible.builtin.assert:
+    that:
+      - "'Status: active' in firewall_status.stdout"
+    fail_msg: "UFW is not active after firewall configuration."
+    success_msg: "UFW is active."
+
+
+# -----------------------------------------------------------------------------
+# Explicitly document Docker firewall boundary
+# -----------------------------------------------------------------------------
+
+- name: Display Docker firewall notice
+  ansible.builtin.debug:
+    msg:
+      - >-
+        UFW is configured and active. Docker-published ports are not assumed
+        to be protected by UFW alone.
+      - >-
+        Docker-specific filtering will be implemented separately through the
+        Docker firewall policy.

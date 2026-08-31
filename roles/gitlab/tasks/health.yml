@@ -1,0 +1,106 @@
+---
+# =============================================================================
+# GitLab health validation
+# =============================================================================
+#
+# Wait for the GitLab container and application to become available after
+# deployment.
+#
+# GitLab can require several minutes for the first Omnibus initialization, so
+# this is intentionally separate from container creation.
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Wait for the container to exist
+# -----------------------------------------------------------------------------
+
+- name: Wait for GitLab container to exist
+  community.docker.docker_container_info:
+    name: "{{ gitlab_container_name }}"
+  register: gitlab_health_container
+  retries: 30
+  delay: 5
+  until:
+    - gitlab_health_container.exists | bool
+
+
+# -----------------------------------------------------------------------------
+# Wait for the container to enter running state
+# -----------------------------------------------------------------------------
+
+- name: Wait for GitLab container to start
+  community.docker.docker_container_info:
+    name: "{{ gitlab_container_name }}"
+  register: gitlab_health_container
+  retries: 60
+  delay: 10
+  until:
+    - gitlab_health_container.exists | bool
+    - gitlab_health_container.container.State.Running | default(false) | bool
+
+
+# -----------------------------------------------------------------------------
+# Wait for GitLab health status
+# -----------------------------------------------------------------------------
+#
+# Docker's healthcheck is defined in docker-compose.yml.
+#
+# We wait for:
+#
+#   healthy
+#
+# rather than assuming that a running container means GitLab is ready.
+# -----------------------------------------------------------------------------
+
+- name: Wait for GitLab container health
+  community.docker.docker_container_info:
+    name: "{{ gitlab_container_name }}"
+  register: gitlab_health_container
+  retries: "{{ gitlab_healthcheck_max_attempts }}"
+  delay: "{{ gitlab_healthcheck_delay_seconds }}"
+  until:
+    - gitlab_health_container.exists | bool
+    - gitlab_health_container.container.State.Running | default(false) | bool
+    - >
+      gitlab_health_container.container.State.Health.Status | default('unknown')
+      == 'healthy'
+
+
+# -----------------------------------------------------------------------------
+# Fail clearly if the container is not healthy
+# -----------------------------------------------------------------------------
+
+- name: Validate GitLab container health
+  ansible.builtin.assert:
+    that:
+      - gitlab_health_container.container.State.Running | bool
+      - gitlab_health_container.container.State.Health.Status == "healthy"
+    fail_msg: >-
+      GitLab container did not become healthy.
+
+      Container state:
+      {{ gitlab_health_container.container.State | to_nice_json }}
+
+      Review:
+        docker logs {{ gitlab_container_name }}
+    success_msg: "GitLab container is healthy."
+
+
+# -----------------------------------------------------------------------------
+# Display basic health information
+# -----------------------------------------------------------------------------
+
+- name: Display GitLab container health
+  ansible.builtin.debug:
+    msg:
+      - >-
+        GitLab container:
+        {{ gitlab_health_container.container.Name }}
+      - >-
+        Status:
+        {{ gitlab_health_container.container.State.Status }}
+      - >-
+        Health:
+        {{ gitlab_health_container.container.State.Health.Status }}

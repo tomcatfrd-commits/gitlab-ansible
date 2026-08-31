@@ -1,0 +1,98 @@
+---
+# =============================================================================
+# GitLab host preparation
+# =============================================================================
+#
+# Responsibilities:
+#   - Validate the target host
+#   - Prepare the operating system
+#   - Install/configure Docker
+#   - Configure the firewall
+#
+# The actual implementation remains inside roles so that the playbook is
+# orchestration only.
+#
+# =============================================================================
+
+- name: Prepare GitLab server
+  hosts: gitlab
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+
+    - name: Validate operating system
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == gitlab_expected_distribution
+          - ansible_distribution_version is version(gitlab_expected_release, '==')
+        fail_msg: >-
+          Unsupported target OS.
+          Expected {{ gitlab_expected_distribution }} {{ gitlab_expected_release }},
+          detected {{ ansible_distribution }} {{ ansible_distribution_version }}.
+        success_msg: >-
+          Target OS validated:
+          {{ ansible_distribution }} {{ ansible_distribution_version }}.
+
+    - name: Validate CPU architecture
+      ansible.builtin.assert:
+        that:
+          - ansible_architecture == gitlab_expected_architecture
+        fail_msg: >-
+          Unsupported CPU architecture.
+          Expected {{ gitlab_expected_architecture }},
+          detected {{ ansible_architecture }}.
+        success_msg: >-
+          CPU architecture validated: {{ ansible_architecture }}.
+
+    - name: Validate minimum CPU resources
+      ansible.builtin.assert:
+        that:
+          - ansible_processor_vcpus >= gitlab_expected_vcpus
+        fail_msg: >-
+          Insufficient CPU resources.
+          Expected at least {{ gitlab_expected_vcpus }} vCPUs,
+          detected {{ ansible_processor_vcpus }}.
+        success_msg: >-
+          CPU resources validated:
+          {{ ansible_processor_vcpus }} vCPUs.
+
+    - name: Validate minimum memory
+      ansible.builtin.assert:
+        that:
+          - ansible_memtotal_mb >= gitlab_expected_memory_mb
+        fail_msg: >-
+          Insufficient memory.
+          Expected at least {{ gitlab_expected_memory_mb }} MB,
+          detected {{ ansible_memtotal_mb }} MB.
+        success_msg: >-
+          Memory resources validated:
+          {{ ansible_memtotal_mb }} MB.
+
+    - name: Validate deployment user exists
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ gitlab_deployment_user }}"
+
+    - name: Validate deployment user's home directory
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.getent_passwd[gitlab_deployment_user][4] == gitlab_deployment_home
+        fail_msg: >-
+          Deployment home directory mismatch.
+          Expected {{ gitlab_deployment_home }},
+          detected {{ ansible_facts.getent_passwd[gitlab_deployment_user][4] }}.
+        success_msg: >-
+          Deployment user and home directory validated:
+          {{ gitlab_deployment_user }} -> {{ gitlab_deployment_home }}.
+
+  roles:
+
+    - role: host_prepare
+      when: gitlab_manage_host | bool
+
+    - role: docker
+      when: gitlab_manage_docker | bool
+
+    - role: firewall
+      when: gitlab_manage_firewall | bool

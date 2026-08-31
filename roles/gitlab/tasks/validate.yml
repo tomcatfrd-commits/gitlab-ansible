@@ -1,0 +1,199 @@
+---
+# =============================================================================
+# GitLab deployment validation
+# =============================================================================
+#
+# Validate configuration before changing the target system.
+#
+# This file should fail early when the central configuration contains an
+# invalid or contradictory value.
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Required values
+# -----------------------------------------------------------------------------
+
+- name: Validate GitLab FQDN
+  ansible.builtin.assert:
+    that:
+      - gitlab_fqdn is defined
+      - gitlab_fqdn | trim | length > 0
+      - gitlab_fqdn != "CHANGE_ME"
+    fail_msg: >-
+      gitlab_fqdn is not configured.
+      Set it in group_vars/gitlab.yml.
+    success_msg: "GitLab FQDN configured: {{ gitlab_fqdn }}"
+
+
+- name: Validate GitLab version
+  ansible.builtin.assert:
+    that:
+      - gitlab_version is defined
+      - gitlab_version | trim | length > 0
+      - gitlab_version != "CHANGE_ME"
+    fail_msg: >-
+      gitlab_version is not configured.
+      Set it in group_vars/gitlab.yml.
+    success_msg: "GitLab version configured: {{ gitlab_version }}"
+
+
+- name: Validate GitLab image digest
+  ansible.builtin.assert:
+    that:
+      - gitlab_image_digest is defined
+      - gitlab_image_digest is match('^sha256:[0-9a-f]{64}$')
+    fail_msg: >-
+      gitlab_image_digest must be a valid SHA-256 image digest.
+    success_msg: "GitLab image digest format validated."
+
+
+- name: Validate deployment user
+  ansible.builtin.assert:
+    that:
+      - gitlab_deployment_user is defined
+      - gitlab_deployment_user | trim | length > 0
+      - gitlab_deployment_user != "CHANGE_ME"
+    fail_msg: >-
+      gitlab_deployment_user is not configured correctly.
+    success_msg: >-
+      GitLab deployment user configured:
+      {{ gitlab_deployment_user }}
+
+
+# -----------------------------------------------------------------------------
+# Validate paths
+# -----------------------------------------------------------------------------
+
+- name: Validate GitLab root path
+  ansible.builtin.assert:
+    that:
+      - gitlab_root_dir is defined
+      - gitlab_root_dir | trim | length > 0
+      - gitlab_root_dir.startswith(gitlab_deployment_home ~ '/')
+    fail_msg: >-
+      gitlab_root_dir must reside below the deployment user's home directory.
+      Expected a path below {{ gitlab_deployment_home }}.
+    success_msg: >-
+      GitLab root path validated:
+      {{ gitlab_root_dir }}
+
+
+- name: Validate GitLab subdirectories
+  ansible.builtin.assert:
+    that:
+      - gitlab_compose_dir.startswith(gitlab_root_dir ~ '/')
+      - gitlab_config_dir.startswith(gitlab_root_dir ~ '/')
+      - gitlab_logs_dir.startswith(gitlab_root_dir ~ '/')
+      - gitlab_data_dir.startswith(gitlab_root_dir ~ '/')
+      - gitlab_backup_dir.startswith(gitlab_root_dir ~ '/')
+    fail_msg: >-
+      One or more GitLab directories are outside gitlab_root_dir.
+    success_msg: "GitLab directory layout validated."
+
+
+# -----------------------------------------------------------------------------
+# Validate ports
+# -----------------------------------------------------------------------------
+
+- name: Validate GitLab port ranges
+  ansible.builtin.assert:
+    that:
+      - gitlab_http_port | int >= 1
+      - gitlab_http_port | int <= 65535
+      - gitlab_https_port | int >= 1
+      - gitlab_https_port | int <= 65535
+      - gitlab_ssh_port | int >= 1
+      - gitlab_ssh_port | int <= 65535
+      - ansible_port | int >= 1
+      - ansible_port | int <= 65535
+    fail_msg: >-
+      One or more configured ports are outside the valid TCP range.
+    success_msg: "GitLab and administrative SSH port ranges validated."
+
+
+- name: Validate administrative SSH and GitLab SSH are different
+  ansible.builtin.assert:
+    that:
+      - ansible_port | int != gitlab_ssh_port | int
+    fail_msg: >-
+      Administrative SSH port {{ ansible_port }} conflicts with GitLab SSH
+      port {{ gitlab_ssh_port }}.
+    success_msg: >-
+      Administrative SSH and GitLab SSH ports are distinct.
+
+
+- name: Validate GitLab HTTPS and SSH ports are different
+  ansible.builtin.assert:
+    that:
+      - gitlab_https_port | int != gitlab_ssh_port | int
+    fail_msg: >-
+      GitLab HTTPS port {{ gitlab_https_port }} conflicts with GitLab SSH port
+      {{ gitlab_ssh_port }}.
+    success_msg: >-
+      GitLab HTTPS and GitLab SSH ports are distinct.
+
+
+# -----------------------------------------------------------------------------
+# Validate TLS configuration
+# -----------------------------------------------------------------------------
+
+- name: Validate TLS configuration
+  ansible.builtin.assert:
+    that:
+      - gitlab_tls_enabled | bool
+      - gitlab_tls_common_name == gitlab_fqdn
+      - gitlab_tls_validity_days | int >= 1
+      - gitlab_tls_key_size | int >= 2048
+    fail_msg: >-
+      Invalid TLS configuration. Verify the TLS settings in
+      group_vars/gitlab.yml.
+    success_msg: "GitLab TLS configuration validated."
+  when: gitlab_tls_enabled | bool
+
+
+# -----------------------------------------------------------------------------
+# Validate container security configuration
+# -----------------------------------------------------------------------------
+
+- name: Validate GitLab container security settings
+  ansible.builtin.assert:
+    that:
+      - not (gitlab_privileged | bool)
+      - gitlab_no_new_privileges | bool
+      - gitlab_network_mode != "host"
+      - gitlab_mount_docker_socket | bool == false
+    fail_msg: >-
+      Unsafe GitLab container security configuration detected.
+      GitLab must not run privileged, use host networking, or mount the Docker
+      socket.
+    success_msg: "GitLab container security configuration validated."
+
+
+# -----------------------------------------------------------------------------
+# Validate optional services
+# -----------------------------------------------------------------------------
+
+- name: Validate disabled optional services
+  ansible.builtin.debug:
+    msg:
+      - "GitLab Container Registry enabled: {{ gitlab_registry_enabled }}"
+      - "GitLab Pages enabled: {{ gitlab_pages_enabled }}"
+
+
+# -----------------------------------------------------------------------------
+# Display deployment summary
+# -----------------------------------------------------------------------------
+
+- name: Display GitLab deployment summary
+  ansible.builtin.debug:
+    msg:
+      - "GitLab version: {{ gitlab_version }}"
+      - "GitLab image: {{ gitlab_image_repository }}:{{ gitlab_version }}"
+      - "GitLab FQDN: {{ gitlab_fqdn }}"
+      - "GitLab HTTPS: {{ gitlab_https_port }}"
+      - "GitLab SSH: {{ gitlab_ssh_port }}"
+      - "Administrative SSH: {{ ansible_port }}"
+      - "Deployment root: {{ gitlab_root_dir }}"
+      - "TLS enabled: {{ gitlab_tls_enabled }}"

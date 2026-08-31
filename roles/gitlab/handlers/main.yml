@@ -1,0 +1,76 @@
+---
+# =============================================================================
+# gitlab role handlers
+# =============================================================================
+#
+# Handlers execute only when a notifying task changes something.
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Reconfigure GitLab
+# -----------------------------------------------------------------------------
+
+- name: Reconfigure GitLab
+  ansible.builtin.command:
+    cmd: >-
+      docker exec
+      --user root
+      {{ gitlab_container_name }}
+      gitlab-ctl reconfigure
+  register: gitlab_reconfigure_result
+  changed_when: true
+  failed_when: gitlab_reconfigure_result.rc != 0
+
+
+# -----------------------------------------------------------------------------
+# Restart GitLab
+# -----------------------------------------------------------------------------
+
+- name: Restart GitLab
+  ansible.builtin.command:
+    cmd: >-
+      docker exec
+      --user root
+      {{ gitlab_container_name }}
+      gitlab-ctl restart
+  register: gitlab_restart_result
+  changed_when: true
+  failed_when: gitlab_restart_result.rc != 0
+
+
+# -----------------------------------------------------------------------------
+# Verify GitLab application security settings
+# -----------------------------------------------------------------------------
+#
+# This handler does not change anything. It simply verifies the resulting
+# GitLab application settings after one or more hardening tasks changed them.
+#
+# The handler is executed once at the end of the play even if multiple tasks
+# notified it.
+# -----------------------------------------------------------------------------
+
+- name: Verify GitLab application settings
+  ansible.builtin.command:
+    cmd: >-
+      docker exec
+      {{ gitlab_container_name }}
+      gitlab-rails runner
+      's = Gitlab::CurrentSettings;
+      puts({
+        signup_enabled: s.signup_enabled,
+        admin_mode: s.admin_mode,
+        require_two_factor_authentication: s.require_two_factor_authentication,
+        two_factor_grace_period: s.two_factor_grace_period,
+        require_admin_two_factor_authentication: s.require_admin_two_factor_authentication,
+        notify_on_unknown_sign_in: s.notify_on_unknown_sign_in,
+        require_personal_access_token_expiry: s.require_personal_access_token_expiry
+      }.to_json)'
+  register: gitlab_application_settings_verification
+  changed_when: false
+  failed_when: gitlab_application_settings_verification.rc != 0
+
+- name: Display verified GitLab application security settings
+  ansible.builtin.debug:
+    msg: "{{ gitlab_application_settings_verification.stdout }}"

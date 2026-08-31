@@ -1,0 +1,214 @@
+---
+# =============================================================================
+# host_prepare role
+# =============================================================================
+#
+# Responsibilities:
+#   - Install required host packages
+#   - Validate system resources
+#   - Configure time synchronization
+#   - Configure required kernel parameters
+#   - Prepare the GitLab root directory
+#
+# Environment-specific values are consumed from group_vars/gitlab.yml.
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Validate host resources
+# -----------------------------------------------------------------------------
+
+- name: Validate CPU resources
+  ansible.builtin.assert:
+    that:
+      - ansible_processor_vcpus >= (host_prepare_min_vcpus | int)
+    fail_msg: >-
+      Host has {{ ansible_processor_vcpus }} vCPUs.
+      At least {{ host_prepare_min_vcpus }} vCPUs are required.
+    success_msg: >-
+      CPU requirement satisfied:
+      {{ ansible_processor_vcpus }} vCPUs available.
+
+
+- name: Validate memory resources
+  ansible.builtin.assert:
+    that:
+      - ansible_memtotal_mb >= (host_prepare_min_memory_mb | int)
+    fail_msg: >-
+      Host has approximately {{ ansible_memtotal_mb }} MB RAM.
+      At least {{ host_prepare_min_memory_mb }} MB is required.
+    success_msg: >-
+      Memory requirement satisfied:
+      {{ ansible_memtotal_mb }} MB available.
+
+
+# -----------------------------------------------------------------------------
+# Validate filesystem for deployment
+# -----------------------------------------------------------------------------
+
+- name: Check deployment user's home directory
+  ansible.builtin.stat:
+    path: "{{ gitlab_deployment_home }}"
+  register: gitlab_deployment_home_stat
+
+
+- name: Validate deployment home directory
+  ansible.builtin.assert:
+    that:
+      - gitlab_deployment_home_stat.stat.exists
+      - gitlab_deployment_home_stat.stat.isdir
+    fail_msg: >-
+      Deployment home directory does not exist or is not a directory:
+      {{ gitlab_deployment_home }}
+    success_msg: >-
+      Deployment home directory validated:
+      {{ gitlab_deployment_home }}
+
+
+# -----------------------------------------------------------------------------
+# Install host prerequisites
+# -----------------------------------------------------------------------------
+
+- name: Update APT package cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+
+- name: Install host prerequisite packages
+  ansible.builtin.apt:
+    name: "{{ host_prepare_packages }}"
+    state: present
+
+
+# -----------------------------------------------------------------------------
+# Time synchronization
+# -----------------------------------------------------------------------------
+
+- name: Install chrony
+  ansible.builtin.apt:
+    name: "{{ host_prepare_time_package }}"
+    state: present
+  when: host_prepare_enable_time_sync | bool
+  notify:
+    - Restart chrony
+
+
+- name: Ensure chrony service is enabled and running
+  ansible.builtin.systemd_service:
+    name: "{{ host_prepare_time_service }}"
+    enabled: true
+    state: started
+  when: host_prepare_enable_time_sync | bool
+
+
+# -----------------------------------------------------------------------------
+# Kernel parameters
+# -----------------------------------------------------------------------------
+
+- name: Configure required kernel parameters
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_set: true
+    reload: true
+  loop: "{{ host_prepare_sysctl | dict2items }}"
+  notify:
+    - Reload sysctl
+
+
+# -----------------------------------------------------------------------------
+# GitLab deployment directory
+# -----------------------------------------------------------------------------
+
+- name: Create GitLab root directory
+  ansible.builtin.file:
+    path: "{{ gitlab_root_dir }}"
+    state: directory
+    owner: "{{ gitlab_deployment_user }}"
+    group: "{{ gitlab_deployment_user }}"
+    mode: "0750"
+  when: host_prepare_create_gitlab_root | bool
+
+
+- name: Create GitLab Compose directory
+  ansible.builtin.file:
+    path: "{{ gitlab_compose_dir }}"
+    state: directory
+    owner: "{{ gitlab_deployment_user }}"
+    group: "{{ gitlab_deployment_user }}"
+    mode: "0750"
+  when: host_prepare_create_gitlab_root | bool
+
+
+- name: Create GitLab configuration directory
+  ansible.builtin.file:
+    path: "{{ gitlab_config_dir }}"
+    state: directory
+    owner: "{{ gitlab_deployment_user }}"
+    group: "{{ gitlab_deployment_user }}"
+    mode: "0750"
+  when: host_prepare_create_gitlab_root | bool
+
+
+- name: Create GitLab logs directory
+  ansible.builtin.file:
+    path: "{{ gitlab_logs_dir }}"
+    state: directory
+    owner: "{{ gitlab_deployment_user }}"
+    group: "{{ gitlab_deployment_user }}"
+    mode: "0750"
+  when: host_prepare_create_gitlab_root | bool
+
+
+- name: Create GitLab data directory
+  ansible.builtin.file:
+    path: "{{ gitlab_data_dir }}"
+    state: directory
+    owner: "{{ gitlab_deployment_user }}"
+    group: "{{ gitlab_deployment_user }}"
+    mode: "0750"
+  when: host_prepare_create_gitlab_root | bool
+
+
+- name: Create GitLab backup directory
+  ansible.builtin.file:
+    path: "{{ gitlab_backup_dir }}"
+    state: directory
+    owner: "{{ gitlab_deployment_user }}"
+    group: "{{ gitlab_deployment_user }}"
+    mode: "0750"
+  when: host_prepare_create_gitlab_root | bool
+
+
+# -----------------------------------------------------------------------------
+# Optional swap management
+# -----------------------------------------------------------------------------
+
+- name: Read active swap devices
+  ansible.builtin.command:
+    cmd: swapon --show --noheadings --raw
+  register: host_prepare_swap_status
+  changed_when: false
+  failed_when: false
+
+
+- name: Report active swap configuration
+  ansible.builtin.debug:
+    msg: >-
+      Active swap detected:
+      {{ host_prepare_swap_status.stdout_lines }}
+  when:
+    - host_prepare_swap_status.stdout | trim | length > 0
+
+
+- name: Warn when swap is active but management is disabled
+  ansible.builtin.debug:
+    msg: >-
+      Swap is active on the host. Automatic swap modification is disabled by
+      design. Review it manually before production deployment if required.
+  when:
+    - host_prepare_swap_status.stdout | trim | length > 0
+    - not host_prepare_manage_swap | bool

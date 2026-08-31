@@ -1,0 +1,25 @@
+---
+# =============================================================================
+# gitlab_backup role handlers
+# =============================================================================
+#
+# These handlers are triggered only when backup-related configuration changes.
+#
+# =============================================================================
+
+
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+
+- name: Reconfigure GitLab
+  ansible.builtin.command:
+    cmd: >-
+      docker exec
+      --user root
+      {{ gitlab_container_name }}
+      gitlab-ctl reconfigure
+  register: gitlab_backup_reconfigure_result
+  changed_when: true
+  failed_when: gitlab_backup_reconfigure_result.rc != 0

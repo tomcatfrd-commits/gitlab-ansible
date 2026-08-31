@@ -1,0 +1,155 @@
+---
+# =============================================================================
+# gitlab_backup role
+# =============================================================================
+#
+# Responsibilities:
+#   - Validate backup configuration
+#   - Prepare the host-side backup directory
+#   - Validate the GitLab container
+#   - Install the GitLab backup systemd service
+#   - Install the GitLab backup systemd timer
+#
+# GitLab application backup configuration is managed by:
+#
+#   roles/gitlab/templates/gitlab.rb.j2
+#
+# The backup role does NOT modify gitlab.rb directly.
+#
+# Backup retention is handled by GitLab itself through:
+#
+#   gitlab_rails['backup_keep_time']
+#
+# The role is intentionally inactive while:
+#
+#   gitlab_backup_enabled: false
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Validate backup configuration
+# -----------------------------------------------------------------------------
+
+- name: Validate GitLab backup configuration
+  ansible.builtin.assert:
+    that:
+      - gitlab_backup_dir | trim | length > 0
+      - gitlab_backup_container_dir | trim | length > 0
+      - gitlab_backup_retention_days | int > 0
+      - gitlab_backup_schedule | trim | length > 0
+    fail_msg: >-
+      Invalid GitLab backup configuration.
+      Review the backup settings in group_vars/gitlab.yml.
+    success_msg: "GitLab backup configuration validated."
+
+
+# -----------------------------------------------------------------------------
+# Ensure backup directory exists
+# -----------------------------------------------------------------------------
+
+- name: Create GitLab backup directory
+  ansible.builtin.file:
+    path: "{{ gitlab_backup_dir }}"
+    state: directory
+    owner: "{{ gitlab_deployment_user }}"
+    group: "{{ gitlab_deployment_user }}"
+    mode: "0750"
+
+
+# -----------------------------------------------------------------------------
+# Validate GitLab container
+# -----------------------------------------------------------------------------
+
+- name: Check GitLab container state
+  community.docker.docker_container_info:
+    name: "{{ gitlab_container_name }}"
+  register: gitlab_backup_container
+
+
+- name: Validate GitLab container before configuring backup
+  ansible.builtin.assert:
+    that:
+      - gitlab_backup_container.exists | bool
+      - gitlab_backup_container.container.State.Running | default(false) | bool
+    fail_msg: >-
+      GitLab container "{{ gitlab_container_name }}" is not running.
+      Backup scheduling cannot be configured until GitLab is running.
+    success_msg: "GitLab container is running."
+
+
+# -----------------------------------------------------------------------------
+# Backup service
+# -----------------------------------------------------------------------------
+
+- name: Install GitLab backup systemd service
+  ansible.builtin.template:
+    src: gitlab-backup.service.j2
+    dest: "/etc/systemd/system/{{ gitlab_backup_service_name }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+
+
+# -----------------------------------------------------------------------------
+# Backup timer
+# -----------------------------------------------------------------------------
+
+- name: Install GitLab backup systemd timer
+  ansible.builtin.template:
+    src: gitlab-backup.timer.j2
+    dest: "/etc/systemd/system/{{ gitlab_backup_timer_name }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+
+
+# -----------------------------------------------------------------------------
+# Enable / disable backup timer
+# -----------------------------------------------------------------------------
+
+- name: Ensure GitLab backup timer state
+  ansible.builtin.systemd_service:
+    name: "{{ gitlab_backup_timer_name }}"
+    enabled: "{{ gitlab_backup_timer_enabled }}"
+    state: "{{ gitlab_backup_timer_state }}"
+    daemon_reload: true
+
+
+# -----------------------------------------------------------------------------
+# Verify timer configuration
+# -----------------------------------------------------------------------------
+
+- name: Inspect GitLab backup timer
+  ansible.builtin.command:
+    cmd: systemctl is-enabled "{{ gitlab_backup_timer_name }}"
+  register: gitlab_backup_timer_enabled_state
+  changed_when: false
+  failed_when: false
+
+
+- name: Display GitLab backup configuration
+  ansible.builtin.debug:
+    msg:
+      - >-
+        GitLab backup automation enabled:
+        {{ gitlab_backup_enabled | bool }}
+      - >-
+        Backup host directory:
+        {{ gitlab_backup_dir }}
+      - >-
+        Backup container directory:
+        {{ gitlab_backup_container_dir }}
+      - >-
+        Backup timer:
+        {{ gitlab_backup_timer_name }}
+      - >-
+        Backup schedule:
+        {{ gitlab_backup_schedule }}
+      - >-
+        Retention:
+        {{ gitlab_backup_retention_days }} days

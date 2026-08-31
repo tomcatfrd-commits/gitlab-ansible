@@ -1,0 +1,72 @@
+---
+# =============================================================================
+# gitlab role
+# =============================================================================
+#
+# Main task entry point.
+#
+# The deployment is deliberately split into focused task files so that:
+#
+#   - each stage is easier to review
+#   - handlers can react to individual changes
+#   - the role remains maintainable
+#   - failures are easier to isolate
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# Validate deployment configuration
+# -----------------------------------------------------------------------------
+
+- name: Validate GitLab configuration
+  ansible.builtin.import_tasks: validate.yml
+
+
+# -----------------------------------------------------------------------------
+# Prepare filesystem
+# -----------------------------------------------------------------------------
+
+- name: Prepare GitLab filesystem
+  ansible.builtin.import_tasks: directories.yml
+
+
+# -----------------------------------------------------------------------------
+# TLS
+# -----------------------------------------------------------------------------
+
+- name: Configure GitLab TLS
+  ansible.builtin.import_tasks: tls.yml
+  when: gitlab_tls_enabled | bool
+
+
+# -----------------------------------------------------------------------------
+# GitLab Omnibus configuration
+# -----------------------------------------------------------------------------
+
+- name: Configure GitLab Omnibus
+  ansible.builtin.import_tasks: configuration.yml
+
+
+# -----------------------------------------------------------------------------
+# Docker Compose
+# -----------------------------------------------------------------------------
+
+- name: Configure GitLab Docker Compose
+  ansible.builtin.import_tasks: compose.yml
+
+
+# -----------------------------------------------------------------------------
+# Deploy container
+# -----------------------------------------------------------------------------
+
+- name: Deploy GitLab container
+  ansible.builtin.import_tasks: container.yml
+
+
+# -----------------------------------------------------------------------------
+# Wait for initial GitLab startup
+# -----------------------------------------------------------------------------
+
+- name: Wait for GitLab initialization
+  ansible.builtin.import_tasks: health.yml
