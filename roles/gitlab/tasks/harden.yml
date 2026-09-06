@@ -96,18 +96,22 @@
 # Mandatory 2FA for all users
 # -----------------------------------------------------------------------------
 
-- name: Read GitLab global 2FA setting
+- name: Read GitLab global 2FA settings
   ansible.builtin.command:
     cmd: >-
       docker exec
       {{ gitlab_container_name }}
       gitlab-rails runner
-      'puts Gitlab::CurrentSettings.require_two_factor_authentication'
+      's = Gitlab::CurrentSettings;
+      puts({
+        require_two_factor_authentication: s.require_two_factor_authentication,
+        two_factor_grace_period: s.two_factor_grace_period
+      }.to_json)'
   register: gitlab_2fa_current
   changed_when: false
 
 
-- name: Enable mandatory GitLab 2FA
+- name: Configure mandatory GitLab 2FA
   ansible.builtin.command:
     cmd: >-
       docker exec
@@ -119,7 +123,12 @@
       )'
   when:
     - gitlab_require_two_factor_authentication | bool
-    - gitlab_2fa_current.stdout | trim | lower != "true"
+    - >
+      (gitlab_2fa_current.stdout | from_json).require_two_factor_authentication
+      != true
+      or
+      (gitlab_2fa_current.stdout | from_json).two_factor_grace_period | int
+      != gitlab_two_factor_grace_period_hours | int
   notify:
     - Verify GitLab application settings
 
