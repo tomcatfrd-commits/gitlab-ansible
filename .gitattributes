@@ -1,0 +1,15 @@
+# Repository line-ending policy
+#
+# Git stores text files using LF. This keeps the repository consistent across
+# Windows, WSL, and Linux environments.
+
+* text=auto eol=lf
+
+# Explicitly classify common project file types as text.
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.j2    text eol=lf
+*.cfg   text eol=lf
+*.md    text eol=lf
+*.sh    text eol=lf
+*.json  text eol=lf
