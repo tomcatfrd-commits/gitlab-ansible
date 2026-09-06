@@ -106,7 +106,7 @@ gitlab_rails['nginx']['hsts_preload'] = {{
 # -----------------------------------------------------------------------------
 
 # Hide NGINX version information from the HTTP response.
-nginx['server_tokens'] = 'off'
+gitlab_rails['nginx']['hide_server_tokens'] = 'on'
 
 
 # -----------------------------------------------------------------------------
@@ -144,10 +144,21 @@ prometheus['enable'] = true
 
 
 # -----------------------------------------------------------------------------
-# GitLab NGINX access controls
+# GitLab host-header protection
 # -----------------------------------------------------------------------------
 
-# Do not accept arbitrary Host headers as the canonical GitLab hostname.
+# Only accept the configured GitLab hostname.
+#
+# This provides defense in depth against unexpected Host headers.
+gitlab_rails['allowed_hosts'] = [
+  '{{ gitlab_fqdn }}'
+]
+
+
+# -----------------------------------------------------------------------------
+# GitLab NGINX proxy headers
+# -----------------------------------------------------------------------------
+
 gitlab_rails['nginx']['proxy_set_headers'] = {
   "Host" => "$http_host",
   "X-Real-IP" => "$remote_addr",

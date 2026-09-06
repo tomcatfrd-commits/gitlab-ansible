@@ -38,17 +38,6 @@ gitlab_container_network_mode: "{{ gitlab_network_mode }}"
 gitlab_image: >-
   {{ gitlab_image_repository }}:{{ gitlab_version }}@{{ gitlab_image_digest }}
 
-gitlab_image_pull_policy: "{{ gitlab_image_pull_policy }}"
-
-
-# -----------------------------------------------------------------------------
-# GitLab persistent volumes
-# -----------------------------------------------------------------------------
-
-gitlab_volume_config: "{{ gitlab_config_dir }}:/etc/gitlab"
-gitlab_volume_logs: "{{ gitlab_logs_dir }}:/var/log/gitlab"
-gitlab_volume_data: "{{ gitlab_data_dir }}:/var/opt/gitlab"
-
 
 # -----------------------------------------------------------------------------
 # Network ports

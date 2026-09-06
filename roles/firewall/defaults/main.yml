@@ -1,106 +1,71 @@
 ---
 # =============================================================================
-# firewall role defaults
+# FIREWALL ROLE DEFAULTS
 # =============================================================================
 #
-# The central deployment configuration lives in:
+# Environment-specific values belong in:
 #
 #   group_vars/gitlab.yml
 #
-# These variables provide safe role defaults and are overridden there when
-# required.
+# This file contains reusable defaults for the firewall role.
 #
 # =============================================================================
 
 
 # -----------------------------------------------------------------------------
-# Firewall implementation
+# UFW
 # -----------------------------------------------------------------------------
-
-firewall_enabled: true
 
 firewall_package: "ufw"
-firewall_package_state: present
-
-
-# -----------------------------------------------------------------------------
-# Default UFW policy
-# -----------------------------------------------------------------------------
+firewall_package_state: "present"
 
 firewall_default_incoming_policy: "deny"
 firewall_default_outgoing_policy: "allow"
 firewall_default_routed_policy: "deny"
 
+firewall_logging: "low"
+
 
 # -----------------------------------------------------------------------------
-# Logging
+# Host firewall
 # -----------------------------------------------------------------------------
 
-firewall_logging: "medium"
+firewall_rule_comment_prefix: "GitLab Ansible"
 
 
 # -----------------------------------------------------------------------------
 # IPv6
 # -----------------------------------------------------------------------------
-#
-# Keep IPv6 enabled by default.
-# The deployment can explicitly disable it from the central configuration if
-# the environment requires that.
-# -----------------------------------------------------------------------------
 
 firewall_manage_ipv6: true
 
-
 # -----------------------------------------------------------------------------
-# SSH protection
-# -----------------------------------------------------------------------------
-
-# Existing administrative SSH access is handled first.
-# This is critical to avoid locking ourselves out while enabling UFW.
-firewall_allow_admin_ssh: true
-
-# GitLab SSH is a separate service/port.
-firewall_allow_gitlab_ssh: true
-
-# HTTPS is required for the GitLab web interface.
-firewall_allow_https: true
-
-
-# -----------------------------------------------------------------------------
-# Default UFW rule behavior
+# Docker firewall
 # -----------------------------------------------------------------------------
 
-# Rules managed by this role are explicitly marked for easy identification.
-firewall_rule_comment_prefix: "GitLab deployment"
+# Docker's iptables integration must remain enabled because GitLab uses
+# Docker-published ports.
+docker_firewall_backend: "iptables"
+docker_iptables_enabled: true
+docker_ip6tables_enabled: true
 
+# Enable administrator-managed filtering through Docker's DOCKER-USER chain.
+docker_firewall_enabled: true
 
-# -----------------------------------------------------------------------------
-# UFW application profile handling
-# -----------------------------------------------------------------------------
-
-# We intentionally do not depend on UFW's "OpenSSH" application profile.
-# The exact configured administrative SSH port is used instead.
-firewall_use_ssh_application_profile: false
-
-
-# -----------------------------------------------------------------------------
-# Docker integration
-# -----------------------------------------------------------------------------
+# Only these TCP ports are intentionally exposed by the GitLab container.
 #
-# Docker-published ports can bypass normal UFW filtering because Docker adds
-# its own iptables/nftables rules.
+# The values come from the central GitLab configuration.
+docker_firewall_allowed_tcp_ports:
+  - "{{ gitlab_https_port }}"
+  - "{{ gitlab_ssh_port }}"
+
+# Optional explicit external interface.
 #
-# Therefore UFW is NOT treated as the sole security boundary for Docker
-# published ports. We will handle Docker-specific packet filtering separately
-# where required.
-# -----------------------------------------------------------------------------
+# Leave empty to automatically use ansible_default_ipv4.interface.
+docker_firewall_external_interface: ""
 
-firewall_manage_docker_rules: true
-
-
-# -----------------------------------------------------------------------------
-# Fail-safe behavior
-# -----------------------------------------------------------------------------
-
-# Refuse to enable the firewall if the administrative SSH port is not known.
-firewall_require_admin_ssh_port: true
+# Name of our private chain inside DOCKER-USER.
+#
+# We manage this chain rather than flushing DOCKER-USER itself. This avoids
+# interfering with other software that may use Docker's administrator chain.
+docker_firewall_chain: "GITLAB-DOCKER-USER"

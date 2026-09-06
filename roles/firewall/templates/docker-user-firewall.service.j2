@@ -1,0 +1,14 @@
+[Unit]
+Description=GitLab Docker firewall policy
+Documentation=https://docs.docker.com/engine/network/firewall-iptables/
+Requires=docker.service
+After=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/gitlab-docker-firewall.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

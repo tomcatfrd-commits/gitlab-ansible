@@ -4,5 +4,7 @@
   "log-driver": {{ docker_log_driver | to_json }},
   "log-opts": {{ docker_log_opts | to_json }},
   "experimental": {{ docker_experimental | bool | to_json }},
-  "data-root": {{ docker_data_root | to_json }}
+  "data-root": {{ docker_data_root | to_json }},
+  "iptables": {{ docker_iptables_enabled | bool | to_json }},
+  "ip6tables": {{ docker_ip6tables_enabled | bool | to_json }}
 }

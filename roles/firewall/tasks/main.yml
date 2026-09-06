@@ -110,53 +110,26 @@
   community.general.ufw:
     logging: "{{ firewall_logging }}"
 
-
 # -----------------------------------------------------------------------------
-# Administrative SSH
+# Allow required inbound TCP ports
 # -----------------------------------------------------------------------------
 #
-# This rule is created BEFORE UFW is enabled.
-# The exact configured administrative SSH port is used instead of the generic
-# OpenSSH application profile.
+# The complete list is maintained centrally in:
+#
+#   group_vars/gitlab.yml
+#
+# This keeps the firewall role independent from the specific deployment
+# values while ensuring all required ports are configured consistently.
 # -----------------------------------------------------------------------------
 
-- name: Allow administrative SSH
+- name: Allow required inbound TCP ports
   community.general.ufw:
     rule: allow
     direction: in
     proto: tcp
-    port: "{{ ansible_port }}"
-    comment: "{{ firewall_rule_comment_prefix }} - administrative SSH"
-  when: firewall_allow_admin_ssh | bool
-
-
-# -----------------------------------------------------------------------------
-# GitLab HTTPS
-# -----------------------------------------------------------------------------
-
-- name: Allow GitLab HTTPS
-  community.general.ufw:
-    rule: allow
-    direction: in
-    proto: tcp
-    port: "{{ gitlab_https_port }}"
-    comment: "{{ firewall_rule_comment_prefix }} - GitLab HTTPS"
-  when: firewall_allow_https | bool
-
-
-# -----------------------------------------------------------------------------
-# GitLab SSH
-# -----------------------------------------------------------------------------
-
-- name: Allow GitLab SSH
-  community.general.ufw:
-    rule: allow
-    direction: in
-    proto: tcp
-    port: "{{ gitlab_ssh_port }}"
-    comment: "{{ firewall_rule_comment_prefix }} - GitLab SSH"
-  when: firewall_allow_gitlab_ssh | bool
-
+    port: "{{ item }}"
+    comment: "{{ firewall_rule_comment_prefix }} - TCP {{ item }}"
+  loop: "{{ gitlab_firewall_allowed_tcp_ports }}"
 
 # -----------------------------------------------------------------------------
 # IPv6
@@ -220,15 +193,128 @@
 
 
 # -----------------------------------------------------------------------------
-# Explicitly document Docker firewall boundary
+# Docker firewall policy
+# -----------------------------------------------------------------------------
+#
+# Docker-published ports require filtering through DOCKER-USER because Docker
+# creates its own forwarding/NAT rules.
+#
+# The firewall policy is implemented as:
+#
+#   DOCKER-USER
+#       |
+#       +--> GITLAB-DOCKER-USER
+#                |
+#                +--> ESTABLISHED,RELATED : ACCEPT
+#                +--> GitLab published ports : ACCEPT
+#                +--> container-originated traffic : RETURN
+#                +--> other external traffic : DROP
+#
+# The dedicated chain prevents this role from flushing rules belonging to
+# other software in DOCKER-USER.
 # -----------------------------------------------------------------------------
 
-- name: Display Docker firewall notice
+- name: Determine Docker firewall external interface
+  ansible.builtin.set_fact:
+    docker_firewall_interface: >-
+      {{
+        docker_firewall_external_interface
+        if docker_firewall_external_interface | length > 0
+        else ansible_default_ipv4.interface
+      }}
+  when: docker_firewall_enabled | bool
+
+
+- name: Validate Docker firewall external interface
+  ansible.builtin.assert:
+    that:
+      - docker_firewall_interface is defined
+      - docker_firewall_interface | length > 0
+    fail_msg: >-
+      Unable to determine the external network interface for the Docker
+      firewall. Set docker_firewall_external_interface explicitly.
+    success_msg: >-
+      Docker firewall external interface:
+      {{ docker_firewall_interface }}
+  when: docker_firewall_enabled | bool
+
+
+- name: Validate Docker firewall ports
+  ansible.builtin.assert:
+    that:
+      - docker_firewall_allowed_tcp_ports is defined
+      - docker_firewall_allowed_tcp_ports | length > 0
+      - >
+        docker_firewall_allowed_tcp_ports
+        | map('int')
+        | select('gt', 0)
+        | list
+        | length
+        ==
+        docker_firewall_allowed_tcp_ports | length
+      - >
+        docker_firewall_allowed_tcp_ports
+        | map('int')
+        | select('lt', 65536)
+        | list
+        | length
+        ==
+        docker_firewall_allowed_tcp_ports | length
+    fail_msg: >-
+      Docker firewall contains one or more invalid TCP ports.
+    success_msg: >-
+      Docker firewall allowed TCP ports:
+      {{ docker_firewall_allowed_tcp_ports | join(', ') }}
+  when: docker_firewall_enabled | bool
+
+
+- name: Install Docker firewall policy script
+  ansible.builtin.template:
+    src: docker-user-firewall.sh.j2
+    dest: /usr/local/sbin/gitlab-docker-firewall.sh
+    owner: root
+    group: root
+    mode: "0750"
+  notify:
+    - Restart GitLab Docker firewall service
+  when: docker_firewall_enabled | bool
+
+
+- name: Install Docker firewall systemd service
+  ansible.builtin.template:
+    src: docker-user-firewall.service.j2
+    dest: /etc/systemd/system/gitlab-docker-firewall.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Restart GitLab Docker firewall service
+  when: docker_firewall_enabled | bool
+
+
+- name: Reload systemd after Docker firewall service changes
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when: docker_firewall_enabled | bool
+
+
+- name: Enable and start GitLab Docker firewall
+  ansible.builtin.systemd_service:
+    name: gitlab-docker-firewall.service
+    enabled: true
+    state: started
+  when: docker_firewall_enabled | bool
+
+
+- name: Verify GitLab Docker firewall chain
+  ansible.builtin.command:
+    cmd: iptables -nL "{{ docker_firewall_chain }}"
+  register: gitlab_docker_firewall_status
+  changed_when: false
+  when: docker_firewall_enabled | bool
+
+
+- name: Display GitLab Docker firewall policy
   ansible.builtin.debug:
-    msg:
-      - >-
-        UFW is configured and active. Docker-published ports are not assumed
-        to be protected by UFW alone.
-      - >-
-        Docker-specific filtering will be implemented separately through the
-        Docker firewall policy.
+    var: gitlab_docker_firewall_status.stdout_lines
+  when: docker_firewall_enabled | bool

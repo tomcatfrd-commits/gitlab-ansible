@@ -1,0 +1,10 @@
+---
+# =============================================================================
+# firewall role handlers
+# =============================================================================
+
+- name: Restart GitLab Docker firewall service
+  ansible.builtin.systemd_service:
+    name: gitlab-docker-firewall.service
+    state: restarted
+    daemon_reload: true

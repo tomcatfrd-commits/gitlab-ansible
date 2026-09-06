@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+CHAIN="{{ docker_firewall_chain }}"
+EXTERNAL_INTERFACE="{{ docker_firewall_interface }}"
+
+iptables_cmd="/usr/sbin/iptables"
+
+# ---------------------------------------------------------------------------
+# Ensure the custom chain exists
+# ---------------------------------------------------------------------------
+
+if ! "${iptables_cmd}" -nL "${CHAIN}" >/dev/null 2>&1; then
+    "${iptables_cmd}" -N "${CHAIN}"
+fi
+
+# ---------------------------------------------------------------------------
+# Rebuild only our own chain
+# ---------------------------------------------------------------------------
+#
+# We deliberately do NOT flush DOCKER-USER because that chain belongs to
+# Docker and may contain rules installed by other administrators/software.
+#
+# Only our dedicated chain is flushed.
+# ---------------------------------------------------------------------------
+
+"${iptables_cmd}" -F "${CHAIN}"
+
+# ---------------------------------------------------------------------------
+# Established and related connections
+# ---------------------------------------------------------------------------
+
+"${iptables_cmd}" -A "${CHAIN}" \
+    -m conntrack \
+    --ctstate ESTABLISHED,RELATED \
+    -j ACCEPT
+
+# ---------------------------------------------------------------------------
+# Allow intentionally published GitLab ports
+# ---------------------------------------------------------------------------
+#
+# Docker performs DNAT before traffic reaches DOCKER-USER.
+#
+# Therefore the original published destination port is matched with:
+#
+#     --ctorigdstport
+#
+# rather than the post-DNAT destination port.
+# ---------------------------------------------------------------------------
+
+{% for port in docker_firewall_allowed_tcp_ports %}
+"${iptables_cmd}" -A "${CHAIN}" \
+    -i "${EXTERNAL_INTERFACE}" \
+    -p tcp \
+    -m conntrack \
+    --ctstate NEW \
+    --ctorigdstport {{ port | int }} \
+    -j ACCEPT
+{% endfor %}
+
+# ---------------------------------------------------------------------------
+# Permit traffic originating from Docker containers
+# ---------------------------------------------------------------------------
+#
+# Traffic arriving from the external interface is evaluated above.
+# Container-originated traffic must not be blocked by this inbound policy.
+# ---------------------------------------------------------------------------
+
+"${iptables_cmd}" -A "${CHAIN}" \
+    ! -i "${EXTERNAL_INTERFACE}" \
+    -j RETURN
+
+# ---------------------------------------------------------------------------
+# Drop all other NEW external traffic destined for Docker containers
+# ---------------------------------------------------------------------------
+
+"${iptables_cmd}" -A "${CHAIN}" \
+    -i "${EXTERNAL_INTERFACE}" \
+    -j DROP
+
+# ---------------------------------------------------------------------------
+# Ensure DOCKER-USER jumps to our managed chain
+# ---------------------------------------------------------------------------
+#
+# Remove any previous instances of our jump rule first so repeated executions
+# remain deterministic.
+# ---------------------------------------------------------------------------
+
+while "${iptables_cmd}" -C DOCKER-USER \
+    -j "${CHAIN}" >/dev/null 2>&1; do
+    "${iptables_cmd}" -D DOCKER-USER \
+        -j "${CHAIN}"
+done
+
+"${iptables_cmd}" -I DOCKER-USER 1 \
+    -j "${CHAIN}"

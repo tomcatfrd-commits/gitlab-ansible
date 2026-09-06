@@ -53,6 +53,23 @@ services:
 
     pids_limit: {{ gitlab_container_pids_limit }}
 
+    # -------------------------------------------------------------------------
+    # Ulimits
+    # -------------------------------------------------------------------------
+    #
+    # GitLab contains multiple internal services and can maintain a large
+    # number of file descriptors.
+    # -------------------------------------------------------------------------
+
+    ulimits:
+      nofile:
+        soft: {{ gitlab_nofile_soft }}
+        hard: {{ gitlab_nofile_hard }}
+
+
+    # -------------------------------------------------------------------------
+    # Resource limits
+    # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
     # Resource limits
@@ -172,7 +189,7 @@ services:
 
     environment: {}
 
-
+{% if gitlab_healthcheck_enabled | bool %}
     # -------------------------------------------------------------------------
     # Health check
     # -------------------------------------------------------------------------
@@ -180,7 +197,7 @@ services:
     # GitLab exposes /-/health and returns HTTP 200 with "GitLab OK" when the
     # application is available.
     #
-    # Because our certificate is self-signed, curl uses -k for this internal
+    # Because the certificate is self-signed, curl uses -k for this
     # container-local health check.
     # -------------------------------------------------------------------------
 
@@ -198,7 +215,7 @@ services:
       timeout: "{{ gitlab_healthcheck_timeout }}"
       retries: {{ gitlab_healthcheck_retries }}
       start_period: "{{ gitlab_healthcheck_start_period }}"
-
+{% endif %}
 
     # -------------------------------------------------------------------------
     # Logging

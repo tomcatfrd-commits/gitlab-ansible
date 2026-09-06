@@ -51,6 +51,12 @@ gitlab_expected_distribution: "Ubuntu"
 gitlab_expected_release: "26.04"
 gitlab_expected_architecture: "x86_64"
 
+# Docker repository suite.
+#
+# This is intentionally separate from ansible_distribution_release.
+# The Docker repository must explicitly support the target Ubuntu release.
+gitlab_docker_repository_suite: "noble"
+
 # Expected resources.
 gitlab_expected_vcpus: 8
 gitlab_expected_memory_mb: 16384
