@@ -286,9 +286,11 @@ gitlab_firewall_allowed_tcp_ports:
 gitlab_manage_host: true
 gitlab_manage_docker: true
 
-# Leave IPv6 enabled unless deliberately disabled later.
-gitlab_disable_ipv6: false
+# -----------------------------------------------------------------------------
+# IPv6
+# -----------------------------------------------------------------------------
 
+gitlab_disable_ipv6: true
 
 # -----------------------------------------------------------------------------
 # Backup

@@ -4,7 +4,7 @@
 # =============================================================================
 #
 # Responsibilities:
-#   - Install Docker's official APT repository
+#   - Install Docker from Ubuntu repository
 #   - Install Docker Engine and Compose v2
 #   - Configure the Docker daemon securely
 #   - Enable and start Docker

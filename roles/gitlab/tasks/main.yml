@@ -65,6 +65,25 @@
 
 
 # -----------------------------------------------------------------------------
+# Apply pending GitLab changes
+# -----------------------------------------------------------------------------
+#
+# configuration.yml and compose.yml can notify handlers.
+#
+# Flush handlers before health validation so that:
+#
+#   - GitLab configuration changes are reconfigured
+#   - Compose changes are reconciled
+#   - required restarts occur before health validation
+#
+# This prevents health.yml from validating a stale GitLab configuration.
+# -----------------------------------------------------------------------------
+
+- name: Apply pending GitLab handlers before health validation
+  ansible.builtin.meta: flush_handlers
+
+
+# -----------------------------------------------------------------------------
 # Wait for initial GitLab startup
 # -----------------------------------------------------------------------------
 

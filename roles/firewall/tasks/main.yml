@@ -136,24 +136,47 @@
 # -----------------------------------------------------------------------------
 #
 # UFW handles IPv6 through /etc/default/ufw.
-# We do not disable IPv6 here.
+#
+# When firewall_manage_ipv6 is false, explicitly configure UFW with IPV6=no.
+# This keeps the UFW configuration aligned with the host-level IPv6 policy.
 # -----------------------------------------------------------------------------
+
+- name: Configure UFW IPv6 support
+  ansible.builtin.lineinfile:
+    path: /etc/default/ufw
+    regexp: '^IPV6='
+    line: "IPV6={{ 'yes' if firewall_manage_ipv6 | bool else 'no' }}"
+    create: false
+    owner: root
+    group: root
+    mode: "0644"
+
 
 - name: Verify UFW IPv6 configuration
   ansible.builtin.command:
     cmd: grep -E '^IPV6=' /etc/default/ufw
   register: firewall_ipv6_setting
   changed_when: false
-  failed_when: false
-  when: firewall_manage_ipv6 | bool
+
+
+- name: Verify UFW IPv6 policy
+  ansible.builtin.assert:
+    that:
+      - >-
+        firewall_ipv6_setting.stdout
+        == "IPV6={{ 'yes' if firewall_manage_ipv6 | bool else 'no' }}"
+    fail_msg: >-
+      UFW IPv6 configuration does not match firewall_manage_ipv6.
+      Expected IPV6={{ 'yes' if firewall_manage_ipv6 | bool else 'no' }}.
+      Actual: {{ firewall_ipv6_setting.stdout }}
+    success_msg: >-
+      UFW IPv6 configuration matches the configured policy:
+      {{ firewall_ipv6_setting.stdout }}
 
 
 - name: Display UFW IPv6 configuration
   ansible.builtin.debug:
     msg: "{{ firewall_ipv6_setting.stdout }}"
-  when:
-    - firewall_manage_ipv6 | bool
-    - firewall_ipv6_setting.rc == 0
 
 
 # -----------------------------------------------------------------------------

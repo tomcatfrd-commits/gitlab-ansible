@@ -34,10 +34,11 @@ firewall_rule_comment_prefix: "GitLab Ansible"
 
 
 # -----------------------------------------------------------------------------
-# IPv6
+# UFW IPv6
 # -----------------------------------------------------------------------------
 
-firewall_manage_ipv6: true
+# IPv6 is disabled system-wide for this GitLab deployment.
+firewall_manage_ipv6: false
 
 # -----------------------------------------------------------------------------
 # Docker firewall
