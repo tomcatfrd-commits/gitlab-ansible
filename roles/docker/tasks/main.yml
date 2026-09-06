@@ -28,6 +28,24 @@
     success_msg: "Docker host architecture validated: x86_64."
 
 # -----------------------------------------------------------------------------
+# Remove conflicting/legacy Docker packages
+# -----------------------------------------------------------------------------
+
+- name: Remove conflicting Docker packages
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - docker-compose
+      - docker-compose-plugin
+      - containerd.io
+      - docker-doc
+      - podman-docker
+    state: absent
+    purge: true
+
+
+# -----------------------------------------------------------------------------
 # Ubuntu Docker packages
 # -----------------------------------------------------------------------------
 #
@@ -45,37 +63,6 @@
 
 
 - name: Install Docker Engine and Compose v2 from Ubuntu repositories
-  ansible.builtin.apt:
-    name: "{{ docker_packages }}"
-    state: "{{ docker_package_state }}"
-    update_cache: false
-  notify:
-    - Restart Docker
-
-# -----------------------------------------------------------------------------
-# Remove conflicting/legacy Docker packages
-# -----------------------------------------------------------------------------
-
-- name: Remove conflicting Docker packages
-  ansible.builtin.apt:
-    name:
-      - docker-ce
-      - docker-ce-cli
-      - docker-compose
-      - docker-compose-plugin
-      - containerd.io
-      - docker-doc
-      - podman-docker
-      - runc
-    state: absent
-    purge: true
-
-
-# -----------------------------------------------------------------------------
-# Install Docker
-# -----------------------------------------------------------------------------
-
-- name: Install Docker Engine and Compose v2
   ansible.builtin.apt:
     name: "{{ docker_packages }}"
     state: "{{ docker_package_state }}"
