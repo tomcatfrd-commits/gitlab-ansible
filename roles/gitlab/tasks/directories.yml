@@ -112,13 +112,8 @@
 # Protect Compose configuration
 # -----------------------------------------------------------------------------
 
-- name: Ensure GitLab Compose project is not group/world writable
-  ansible.builtin.file:
-    path: "{{ gitlab_compose_dir }}"
-    state: directory
-    owner: "{{ gitlab_deployment_user }}"
-    group: "{{ gitlab_deployment_user }}"
-    mode: "0750"
+# The Compose directory is already created above with mode 0750.
+# No additional task is required here.
 
 
 # -----------------------------------------------------------------------------

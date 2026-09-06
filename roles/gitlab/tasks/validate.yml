@@ -163,12 +163,28 @@
       - not (gitlab_privileged | bool)
       - gitlab_no_new_privileges | bool
       - gitlab_network_mode != "host"
-      - gitlab_mount_docker_socket | bool == false
+      - not (gitlab_mount_docker_socket | bool)
     fail_msg: >-
       Unsafe GitLab container security configuration detected.
       GitLab must not run privileged, use host networking, or mount the Docker
       socket.
     success_msg: "GitLab container security configuration validated."
+
+
+# -----------------------------------------------------------------------------
+# Validate healthcheck configuration
+# -----------------------------------------------------------------------------
+
+- name: Validate GitLab healthcheck configuration
+  ansible.builtin.assert:
+    that:
+      - gitlab_healthcheck_enabled | bool
+      - gitlab_healthcheck_max_attempts | int >= 1
+      - gitlab_healthcheck_delay_seconds | int >= 1
+    fail_msg: >-
+      GitLab healthcheck must be enabled because deployment validation waits
+      for the container to become healthy.
+    success_msg: "GitLab healthcheck configuration validated."
 
 
 # -----------------------------------------------------------------------------

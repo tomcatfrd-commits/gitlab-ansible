@@ -25,7 +25,7 @@
 
 - name: Pull pinned GitLab image
   community.docker.docker_image_pull:
-    name: "{{ gitlab_image_repository }}:{{ gitlab_version }}"
+    name: "{{ gitlab_image }}"
     platform: "linux/{{ gitlab_architecture }}"
     pull: true
   register: gitlab_image_pull_result
@@ -37,7 +37,7 @@
 
 - name: Inspect GitLab image
   community.docker.docker_image_info:
-    name: "{{ gitlab_image_repository }}:{{ gitlab_version }}"
+    name: "{{ gitlab_image }}"
   register: gitlab_image_info
 
 
@@ -47,23 +47,28 @@
       - gitlab_image_info.images | length > 0
     fail_msg: >-
       GitLab image could not be inspected after pulling:
-      {{ gitlab_image_repository }}:{{ gitlab_version }}
+      {{ gitlab_image }}
     success_msg: "GitLab image is available."
 
 
-# -----------------------------------------------------------------------------
-# Validate Compose configuration again before deployment
-# -----------------------------------------------------------------------------
+- name: Verify GitLab image digest
+  ansible.builtin.assert:
+    that:
+      - gitlab_image_info.images[0].RepoDigests is defined
+      - >
+        (gitlab_image_repository ~ '@' ~ gitlab_image_digest)
+        in gitlab_image_info.images[0].RepoDigests
+    fail_msg: >-
+      GitLab image digest verification failed.
 
-- name: Validate GitLab Compose configuration
-  ansible.builtin.command:
-    cmd: >-
-      docker compose
-      --project-directory {{ gitlab_compose_dir }}
-      config --quiet
-  register: gitlab_compose_validation
-  changed_when: false
-  failed_when: gitlab_compose_validation.rc != 0
+      Expected:
+      {{ gitlab_image_repository }}@{{ gitlab_image_digest }}
+
+      Actual:
+      {{ gitlab_image_info.images[0].RepoDigests | default([]) }}
+    success_msg: >-
+      GitLab image digest verified:
+      {{ gitlab_image_repository }}@{{ gitlab_image_digest }}
 
 
 # -----------------------------------------------------------------------------

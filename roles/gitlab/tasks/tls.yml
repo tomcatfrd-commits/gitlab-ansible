@@ -120,7 +120,7 @@
     privatekey_path: "{{ gitlab_tls_private_key_file }}"
     provider: selfsigned
     selfsigned_digest: sha256
-    selfsigned_not_after: "+825d"
+    selfsigned_not_after: "+{{ gitlab_tls_validity_days }}d"
     selfsigned_not_before: "+0s"
     selfsigned_version: 3
     mode: "{{ gitlab_tls_certificate_mode }}"
@@ -152,12 +152,14 @@
     that:
       - gitlab_tls_certificate_info.exists
       - gitlab_tls_certificate_info.public_key_algorithm == "rsa"
+      - gitlab_tls_certificate_info.public_key_size == gitlab_tls_key_size | int
       - gitlab_tls_certificate_info.signature_algorithm == "sha256WithRSAEncryption"
       - gitlab_tls_certificate_info.subject.commonName == gitlab_fqdn
       - "'DNS:" ~ gitlab_fqdn in gitlab_tls_certificate_info.subject_alt_name
       - not gitlab_tls_certificate_info.basic_constraints_ca
     fail_msg: >-
       Generated GitLab TLS certificate failed validation.
+      Verify the generated certificate properties.
     success_msg: >-
       GitLab TLS certificate validated successfully.
 

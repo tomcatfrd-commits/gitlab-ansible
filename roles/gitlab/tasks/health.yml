@@ -76,7 +76,9 @@
   ansible.builtin.assert:
     that:
       - gitlab_health_container.container.State.Running | bool
-      - gitlab_health_container.container.State.Health.Status == "healthy"
+      - >
+        gitlab_health_container.container.State.Health.Status
+        | default('unknown') == "healthy"
     fail_msg: >-
       GitLab container did not become healthy.
 
